@@ -1,0 +1,141 @@
+<div class="page">
+  <div class="page-entete">
+    <div>
+      <h1>Mon projet</h1>
+      <p>Caractéristiques du bâtiment et du terrain. Toutes les informations peuvent être modifiées si le projet évolue.</p>
+    </div>
+  </div>
+
+  <app-bandeau niveau="info">
+    <strong>Surface du terrain ≠ surface constructible.</strong> La surface réellement exploitable doit être déterminée à partir
+    du plan architectural, des règles d'urbanisme (emprise au sol, reculs, hauteur) et des contraintes du terrain.
+    L'application ne calcule pas de dimensionnement structurel : elle chiffre les quantités que vous saisissez.
+  </app-bandeau>
+
+  <div class="grille grille-3">
+    <form class="carte" style="grid-column: span 2" [formGroup]="form" (ngSubmit)="enregistrer()">
+      <div class="carte-titre"><h2>Caractéristiques</h2></div>
+      <div class="formulaire">
+        <div class="champ large">
+          <label for="nom">Nom du projet *</label>
+          <input id="nom" type="text" formControlName="nom" />
+          <app-erreur-champ [controle]="form.controls.nom" />
+        </div>
+        <div class="champ">
+          <label for="type">Type de bâtiment *</label>
+          <input id="type" type="text" formControlName="typeBatiment" />
+          <app-erreur-champ [controle]="form.controls.typeBatiment" />
+        </div>
+        <div class="champ">
+          <label for="etages">Nombre d'étages (R+…) *</label>
+          <input id="etages" type="number" min="0" formControlName="nombreEtages" />
+          <app-erreur-champ [controle]="form.controls.nombreEtages" />
+        </div>
+        <div class="champ">
+          <label for="pays">Pays *</label>
+          <input id="pays" type="text" formControlName="pays" />
+          <app-erreur-champ [controle]="form.controls.pays" />
+        </div>
+        <div class="champ">
+          <label for="ville">Ville *</label>
+          <input id="ville" type="text" formControlName="ville" />
+          <app-erreur-champ [controle]="form.controls.ville" />
+        </div>
+        <div class="champ">
+          <label for="commune">Commune / quartier</label>
+          <input id="commune" type="text" formControlName="commune" placeholder="Ex. : Yopougon, Cocody…" />
+        </div>
+        <div class="champ">
+          <label for="devise">Devise</label>
+          <input id="devise" type="text" formControlName="devise" />
+          <span class="aide">Franc CFA BCEAO (XOF)</span>
+        </div>
+        <div class="champ">
+          <label for="terrain">Surface du terrain (m²) *</label>
+          <input id="terrain" type="number" min="0" step="any" formControlName="surfaceTerrain" />
+          <app-erreur-champ [controle]="form.controls.surfaceTerrain" />
+        </div>
+        <div class="champ">
+          <label for="constructible">Surface constructible (m²)</label>
+          <input id="constructible" type="number" min="0" step="any" formControlName="surfaceConstructible" placeholder="À déterminer" />
+          <span class="aide">Selon les règles d'urbanisme</span>
+        </div>
+        <div class="champ">
+          <label for="construite">Surface construite estimative (m²)</label>
+          <input id="construite" type="number" min="0" step="any" formControlName="surfaceConstruiteEstimee" placeholder="À déterminer" />
+          <span class="aide">Selon le plan architectural</span>
+        </div>
+        <div class="champ">
+          <label for="style">Style architectural</label>
+          <input id="style" type="text" formControlName="styleArchitectural" />
+        </div>
+        <div class="champ">
+          <label for="config">Configuration des logements</label>
+          <input id="config" type="text" formControlName="configurationLogements" />
+        </div>
+        <div class="champ">
+          <label for="nbLog">Nombre de logements</label>
+          <input id="nbLog" type="number" min="0" formControlName="nombreLogements" placeholder="Selon le plan" />
+        </div>
+        <div class="champ">
+          <label for="debut">Date de début prévue</label>
+          <input id="debut" type="date" formControlName="dateDebutPrevue" />
+        </div>
+        <div class="champ">
+          <label for="reserve">Réserve pour imprévus (%) *</label>
+          <input id="reserve" type="number" min="0" max="50" step="0.5" formControlName="pourcentageReserve" />
+          <span class="aide">Affichée séparément du budget de base</span>
+          <app-erreur-champ [controle]="form.controls.pourcentageReserve" />
+        </div>
+        <div class="champ large">
+          <label for="desc">Descriptif du projet</label>
+          <textarea id="desc" rows="3" formControlName="descriptif"></textarea>
+        </div>
+        <div class="formulaire-actions">
+          <button type="button" class="btn" (click)="annuler()" [disabled]="form.pristine">Annuler</button>
+          <button type="submit" class="btn btn-primaire">Enregistrer</button>
+        </div>
+      </div>
+    </form>
+
+    <div class="grille" style="align-content: start">
+      <section class="carte">
+        <h2>Validation technique</h2>
+        @if (service.metreValide()) {
+          <p><span class="badge vert">Métré validé</span></p>
+          <p class="petit">Validé par <strong>{{ service.projet().metreValidePar }}</strong> le {{ service.projet().metreValideLe | dateFr }}.</p>
+          <button type="button" class="btn btn-danger btn-sm" (click)="annulerValidation()">Retirer la validation</button>
+        } @else {
+          <p><span class="badge orange">{{ mention }}</span></p>
+          <p class="petit muted">Lorsque l'ingénieur ou le métreur a validé les quantités issues des plans d'exécution, enregistrez-le ici.</p>
+          <form [formGroup]="validation" (ngSubmit)="validerMetre()" class="formulaire" style="grid-template-columns: 1fr">
+            <div class="champ">
+              <label for="par">Validé par (nom, fonction) *</label>
+              <input id="par" type="text" formControlName="metreValidePar" placeholder="Ex. : Ing. K. Koffi, BET" />
+              <app-erreur-champ [controle]="validation.controls.metreValidePar" />
+            </div>
+            <div class="champ">
+              <label for="le">Date de validation *</label>
+              <input id="le" type="date" formControlName="metreValideLe" />
+            </div>
+            <div class="formulaire-actions"><button type="submit" class="btn btn-primaire">Enregistrer la validation</button></div>
+          </form>
+        }
+      </section>
+
+      <section class="carte">
+        <h2>Synthèse</h2>
+        <dl class="lignes-def">
+          <dt>Budget estimatif</dt><dd>{{ budget.synthese().totalEstimatif | fcfa }}</dd>
+          <dt>Budget de référence</dt><dd>{{ budget.synthese().totalReference | fcfa }}</dd>
+          <dt>Payé</dt><dd>{{ budget.synthese().paye.total | fcfa }}</dd>
+          <dt>Phases</dt><dd>{{ budget.synthese().phases.length }}</dd>
+          @if (service.projet().surfaceConstruiteEstimee; as surf) {
+            <dt>Coût indicatif au m² construit</dt><dd>{{ budget.synthese().totalReference / surf | fcfa }}</dd>
+          }
+        </dl>
+        <p class="petit muted mt">Pour commencer par le gros œuvre du RDC et du R+1, suivez la <a routerLink="/phases">tranche 1</a> des phases.</p>
+      </section>
+    </div>
+  </div>
+</div>

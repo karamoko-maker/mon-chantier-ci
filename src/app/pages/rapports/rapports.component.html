@@ -1,0 +1,123 @@
+<div class="page">
+  <div class="page-entete non-imprimable">
+    <div>
+      <h1>Devis et rapports</h1>
+      <p>Générez un devis prévisionnel ou un bilan de chantier, imprimez-le ou exportez-le en PDF et CSV (compatible Excel).</p>
+    </div>
+    <div class="actions">
+      <button type="button" class="btn" (click)="imprimer()">Imprimer</button>
+      <button type="button" class="btn" (click)="csv()">Exporter CSV / Excel</button>
+      <button type="button" class="btn btn-primaire" (click)="pdf()" [disabled]="enCours()">{{ enCours() ? 'Génération…' : 'Exporter en PDF' }}</button>
+    </div>
+  </div>
+
+  <div class="onglets non-imprimable" role="tablist">
+    <button type="button" role="tab" [class.actif]="type() === 'devis'" (click)="type.set('devis')">Devis prévisionnel</button>
+    <button type="button" role="tab" [class.actif]="type() === 'bilan'" (click)="type.set('bilan')">Bilan de chantier</button>
+  </div>
+
+  <article class="carte rapport">
+    <header class="entete-rapport">
+      <div>
+        <h1>{{ r().titre }}</h1>
+        <div class="muted">{{ r().projet.nom }} — édité le {{ r().dateEdition | dateFr }} · {{ appli }}</div>
+      </div>
+    </header>
+    @if (r().avecMention) {
+      <div class="mention">{{ mention }}</div>
+    }
+
+    <h2>1. Descriptif du projet et du terrain</h2>
+    <dl class="lignes-def deux-colonnes">
+      <dt>Type de bâtiment</dt><dd>{{ r().projet.typeBatiment }}</dd>
+      <dt>Localisation</dt><dd>{{ r().projet.commune ? r().projet.commune + ', ' : '' }}{{ r().projet.ville }}, {{ r().projet.pays }}</dd>
+      <dt>Style / logements</dt><dd>{{ r().projet.styleArchitectural }} — {{ r().projet.configurationLogements }}</dd>
+      <dt>Surface du terrain</dt><dd>{{ r().projet.surfaceTerrain | nombre }} m²</dd>
+      <dt>Surface constructible</dt><dd>{{ r().projet.surfaceConstructible ? (r().projet.surfaceConstructible | nombre) + ' m²' : 'À déterminer' }}</dd>
+      <dt>Surface construite estimative</dt><dd>{{ r().projet.surfaceConstruiteEstimee ? (r().projet.surfaceConstruiteEstimee | nombre) + ' m²' : 'À déterminer' }}</dd>
+      <dt>Métré technique</dt><dd>{{ r().projet.metreValide ? 'Validé par ' + r().projet.metreValidePar : 'Non validé' }}</dd>
+    </dl>
+    @if (r().projet.descriptif) { <p class="petit">{{ r().projet.descriptif }}</p> }
+
+    <h2>2. Phases de construction</h2>
+    <div class="table-conteneur">
+      <table class="tableau">
+        <thead><tr><th>N°</th><th>Phase</th><th>Statut</th><th class="num">Avanc.</th><th class="num">Budget</th>
+          @if (r().type === 'bilan') { <th class="num">Engagé</th><th class="num">Payé</th><th class="num">Écart</th> } @else { <th>Validé</th> }</tr></thead>
+        <tbody>
+          @for (p of r().phases; track p.phase.id) {
+            <tr>
+              <td>{{ p.phase.ordre }}</td><td>{{ p.phase.nom }}</td><td>{{ statuts[p.phase.statut] }}</td>
+              <td class="num">{{ p.phase.avancement | pourcent }}</td><td class="num">{{ p.reference | fcfa }}</td>
+              @if (r().type === 'bilan') {
+                <td class="num">{{ p.engage | fcfa }}</td><td class="num">{{ p.paye | fcfa }}</td>
+                <td class="num" [class.positif]="p.ecart > 0 && p.paye > 0">{{ p.paye > 0 ? (p.ecart | fcfa) : '—' }}</td>
+              } @else { <td>{{ p.valide === null ? 'Non' : 'Oui' }}</td> }
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+
+    <h2>3. Détail des matériaux (quantités et prix unitaires)</h2>
+    <div class="table-conteneur">
+      <table class="tableau">
+        <thead><tr><th>Matériau</th><th>Phase</th><th class="num">Quantité</th><th>Unité</th><th class="num">Prix unitaire</th><th class="num">Montant</th><th>Source</th></tr></thead>
+        <tbody>
+          @for (m of r().materiaux; track $index) {
+            @if (m.inclus) {
+              <tr><td>{{ m.nom }}</td><td class="petit">{{ m.phase }}</td><td class="num">{{ m.quantite | nombre }}</td><td>{{ m.unite }}</td>
+                <td class="num">{{ m.prixUnitaire | fcfa }}</td><td class="num">{{ m.montant | fcfa }}</td><td class="petit">{{ m.source }}</td></tr>
+            }
+          }
+        </tbody>
+        <tfoot><tr><td colspan="5">Total matériaux</td><td class="num">{{ r().synthese.postes.materiaux | fcfa }}</td><td></td></tr></tfoot>
+      </table>
+    </div>
+
+    @for (bloc of blocs(); track bloc.titre) {
+      <h2>{{ bloc.titre }}</h2>
+      @if (bloc.lignes.length === 0) {
+        <p class="muted petit">Aucun élément saisi.</p>
+      } @else {
+        <div class="table-conteneur">
+          <table class="tableau">
+            <thead><tr><th>Désignation</th><th>Phase</th><th>Détail</th><th class="num">Prévu</th><th class="num">Payé</th></tr></thead>
+            <tbody>
+              @for (l of bloc.lignes; track $index) {
+                <tr><td>{{ l.libelle }}</td><td class="petit">{{ l.phase }}</td><td class="petit">{{ l.detail }}</td>
+                  <td class="num">{{ l.montant | fcfa }}</td><td class="num">{{ l.paye | fcfa }}</td></tr>
+              }
+            </tbody>
+            <tfoot><tr><td colspan="3">Total compté au budget</td><td class="num">{{ bloc.total | fcfa }}</td><td></td></tr></tfoot>
+          </table>
+        </div>
+      }
+    }
+
+    <h2>8. Récapitulatif budgétaire</h2>
+    <dl class="lignes-def recap">
+      @for (k of postes; track k) { <dt>{{ libellesPoste[k] }}</dt><dd>{{ r().synthese.postes[k] | fcfa }}</dd> }
+      <dt class="total">Budget de base (estimatif)</dt><dd class="total">{{ r().synthese.baseEstimatif | fcfa }}</dd>
+      <dt>Réserve pour imprévus ({{ r().synthese.pourcentageReserve }} %)</dt><dd>{{ r().synthese.reserveEstimatif | fcfa }}</dd>
+      <dt class="total">Budget total estimatif</dt><dd class="total">{{ r().synthese.totalEstimatif | fcfa }}</dd>
+      <dt>Budget validé ({{ r().synthese.nombrePhasesValidees }} phase(s))</dt><dd>{{ r().synthese.totalValide | fcfa }}</dd>
+      <dt class="gras">Budget total de référence</dt><dd>{{ r().synthese.totalReference | fcfa }}</dd>
+      <dt>Dépenses engagées</dt><dd>{{ r().synthese.engage.total | fcfa }}</dd>
+      <dt>Montant payé</dt><dd>{{ r().synthese.paye.total | fcfa }}</dd>
+      <dt class="total">Solde budgétaire restant</dt><dd class="total">{{ r().synthese.resteBudget | fcfa }}</dd>
+      <dt>Fonds disponibles pour le chantier</dt><dd>{{ r().fondsDisponibles | fcfa }}</dd>
+      <dt class="gras">Reste à financer</dt><dd>{{ r().resteAFinancer | fcfa }}</dd>
+    </dl>
+
+    <p class="petit muted mt">Ce document chiffre les quantités saisies par l'utilisateur. Il ne constitue pas une étude de dimensionnement
+      structurel. Les prix sont indicatifs et doivent être confirmés par des devis.</p>
+  </article>
+
+  <section class="carte section non-imprimable">
+    <h2>Sauvegarde des données</h2>
+    <p class="petit muted">Exportez toutes les données du chantier dans un fichier JSON pour les conserver ou les transférer sur un autre appareil
+      (import dans Paramètres).</p>
+    <button type="button" class="btn" (click)="json()">Exporter les données (JSON)</button>
+  </section>
+</div>

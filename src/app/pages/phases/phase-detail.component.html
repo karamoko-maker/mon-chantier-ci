@@ -1,0 +1,247 @@
+<div class="page">
+  @if (phase(); as p) {
+    <div class="page-entete">
+      <div>
+        <a routerLink="/phases" class="petit">← Toutes les phases</a>
+        <h1>{{ p.ordre }}. {{ p.nom }}</h1>
+        <p>{{ p.niveau }} · {{ tranches[p.tranche] }}</p>
+      </div>
+      <div class="actions">
+        @if (voisines().precedente; as pr) {
+          <a class="btn btn-sm" [routerLink]="['/phases', pr.id]" title="Phase précédente">← {{ pr.ordre }}</a>
+        }
+        @if (voisines().suivante; as sv) {
+          <a class="btn btn-sm" [routerLink]="['/phases', sv.id]" title="Phase suivante">{{ sv.ordre }} →</a>
+        }
+        <button type="button" class="btn btn-danger" (click)="supprimer()">Supprimer</button>
+      </div>
+    </div>
+
+    @if (p.ordre === 4 || p.nom.toLowerCase().includes('fondation')) {
+      <app-bandeau niveau="attention">
+        Les fondations doivent être dimensionnées par l'ingénieur pour le bâtiment final R+3, même si les étages sont construits plus tard.
+        Saisissez les quantités (béton, fer, coffrage) issues des plans d'exécution : l'application ne les calcule pas.
+      </app-bandeau>
+    }
+
+    <div class="grille grille-3">
+      <form class="carte" style="grid-column: span 2" [formGroup]="form" (ngSubmit)="enregistrer()">
+        <div class="carte-titre"><h2>Informations de la phase</h2></div>
+        <div class="formulaire">
+          <div class="champ large">
+            <label for="nom">Nom *</label>
+            <input id="nom" type="text" formControlName="nom" />
+            <app-erreur-champ [controle]="form.controls.nom" />
+          </div>
+          <div class="champ">
+            <label for="ordre">Ordre *</label>
+            <input id="ordre" type="number" min="1" formControlName="ordre" />
+          </div>
+          <div class="champ">
+            <label for="niveau">Niveau *</label>
+            <input id="niveau" type="text" formControlName="niveau" />
+          </div>
+          <div class="champ">
+            <label for="tranche">Tranche</label>
+            <select id="tranche" formControlName="tranche">
+              @for (t of listeTranches; track t) { <option [ngValue]="t">Tranche {{ t }}</option> }
+            </select>
+          </div>
+          <div class="champ">
+            <label for="debut">Date de début prévue</label>
+            <input id="debut" type="date" formControlName="dateDebut" />
+          </div>
+          <div class="champ">
+            <label for="fin">Date de fin prévue</label>
+            <input id="fin" type="date" formControlName="dateFin" />
+            @if (form.errors?.['plage'] && form.controls.dateFin.touched) {
+              <span class="erreur-champ">{{ form.errors?.['plage'] }}</span>
+            }
+          </div>
+          <div class="champ">
+            <label for="statut">Statut *</label>
+            <select id="statut" formControlName="statut">
+              @for (s of listeStatuts; track s[0]) { <option [ngValue]="s[0]">{{ s[1] }}</option> }
+            </select>
+          </div>
+          <div class="champ">
+            <label for="avancement">Avancement (%) *</label>
+            <input id="avancement" type="number" min="0" max="100" step="5" formControlName="avancement" />
+            <app-erreur-champ [controle]="form.controls.avancement" />
+          </div>
+          <div class="champ">
+            <label for="valide">Budget validé après étude (FCFA)</label>
+            <input id="valide" type="number" min="0" step="1000" formControlName="budgetValide" placeholder="Non validé" />
+            <span class="aide">Laisser vide tant que non validé</span>
+          </div>
+          <div class="champ">
+            <label for="autres">Autres coûts de la phase (FCFA)</label>
+            <input id="autres" type="number" min="0" step="1000" formControlName="autresCouts" />
+            <span class="aide">Coûts non suivis dans les autres modules</span>
+          </div>
+          <div class="champ large">
+            <label for="obs">Observations</label>
+            <textarea id="obs" rows="3" formControlName="observations"></textarea>
+          </div>
+          <div class="formulaire-actions">
+            <button type="button" class="btn" (click)="annuler()" [disabled]="form.pristine">Annuler</button>
+            <button type="submit" class="btn btn-primaire">Enregistrer</button>
+          </div>
+        </div>
+      </form>
+
+      @if (bp(); as b) {
+        <section class="carte">
+          <h2>Budget de la phase</h2>
+          <app-progression [valeur]="p.avancement" />
+          <dl class="lignes-def mt">
+            @for (k of postesListe; track k) {
+              <dt>{{ libellesPoste[k] }}</dt><dd>{{ b.postes[k] | fcfa }}</dd>
+            }
+            <dt class="total">Budget estimatif</dt><dd class="total">{{ b.estimatif | fcfa }}</dd>
+            <dt>Budget validé</dt><dd>{{ b.valide === null ? 'Non validé' : (b.valide | fcfa) }}</dd>
+            <dt class="gras">Budget de référence</dt><dd>{{ b.reference | fcfa }}</dd>
+            <dt>Engagé</dt><dd>{{ b.engage | fcfa }}</dd>
+            <dt>Payé</dt><dd>{{ b.paye | fcfa }}</dd>
+            <dt>Écart (payé − budget)</dt>
+            <dd [class.positif]="b.ecart > 0" [class.negatif]="b.ecart < 0">{{ b.ecart | fcfa }}</dd>
+          </dl>
+          @if (b.depassement === 'constate') {
+            <p class="mt"><span class="badge rouge">Dépassement constaté</span></p>
+          } @else if (b.depassement === 'previsible') {
+            <p class="mt"><span class="badge orange">Dépassement prévisible (engagements)</span></p>
+          }
+          @if (b.economie > 0) {
+            <p class="mt"><span class="badge vert">Économie réalisée : {{ b.economie | fcfa }}</span></p>
+          }
+          <p class="petit muted mt">
+            @if (p.statut === 'termine') { Phase terminée. }
+            @else if (financable()) { Finançable à partir de <strong>{{ financable() | mois: true }}</strong> selon le plan d'épargne. }
+            @else if (financable() === null) { Financement au-delà de l'horizon du plan d'épargne. }
+            @else { Renseignez le budget pour estimer la date de financement. }
+          </p>
+        </section>
+      }
+    </div>
+
+    <!-- Matériaux de la phase -->
+    <section class="carte section">
+      <div class="carte-titre">
+        <h2>Matériaux nécessaires</h2>
+        <span class="petit muted">Prix unitaires issus du catalogue (modifiables dans Matériaux)</span>
+      </div>
+      <div class="table-conteneur">
+        <table class="tableau">
+          <thead>
+            <tr><th>Matériau</th><th class="num">Quantité</th><th>Unité</th><th class="num">Prix unitaire</th><th class="num">Montant</th>
+              <th>Source</th><th>Validée</th><th>Incluse</th><th></th></tr>
+          </thead>
+          <tbody>
+            @for (l of lignes(); track l.ligne.id) {
+              <tr [class.exclue]="!l.ligne.inclureAuBudget">
+                <td>{{ l.materiau?.nom ?? 'Matériau supprimé' }}
+                  @if (l.materiau?.structurel && l.ligne.source === 'hypothese') { <span class="badge orange">à reprendre du métré</span> }
+                </td>
+                <td class="num"><input class="saisie-inline" type="number" min="0" step="any" [value]="l.ligne.quantite"
+                       (change)="modifierQuantite(l.ligne.id, $event)" [attr.aria-label]="'Quantité ' + l.materiau?.nom" /></td>
+                <td>{{ l.materiau?.unite }}</td>
+                <td class="num">{{ l.materiau?.prixUnitaire | fcfa }}</td>
+                <td class="num gras">{{ l.montant | fcfa }}</td>
+                <td>
+                  <select class="saisie-inline" style="width: 170px" (change)="changerSource(l.ligne.id, $event)" aria-label="Source de la quantité">
+                    <option value="hypothese" [selected]="l.ligne.source === 'hypothese'">{{ sources.hypothese }}</option>
+                    <option value="metre_ingenieur" [selected]="l.ligne.source === 'metre_ingenieur'">{{ sources.metre_ingenieur }}</option>
+                  </select>
+                </td>
+                <td><input type="checkbox" [checked]="l.ligne.valide" (change)="basculer(l.ligne.id, 'valide', $event)" aria-label="Quantité validée" /></td>
+                <td><input type="checkbox" [checked]="l.ligne.inclureAuBudget" (change)="basculer(l.ligne.id, 'inclureAuBudget', $event)" aria-label="Incluse au budget" /></td>
+                <td class="actions-ligne">
+                  <button type="button" class="btn-lien" (click)="retirer(l.ligne.id)" title="Remettre dans l'estimation non répartie">Retirer</button>
+                  <button type="button" class="btn-lien danger" (click)="supprimerLigne(l.ligne.id, l.materiau?.nom ?? '')">Supprimer</button>
+                </td>
+              </tr>
+            } @empty {
+              <tr><td colspan="9" class="vide">Aucun matériau affecté à cette phase.</td></tr>
+            }
+          </tbody>
+        </table>
+      </div>
+
+      <form class="formulaire mt" [formGroup]="formLigne" (ngSubmit)="ajouterLigne()">
+        <div class="champ">
+          <label for="mat">Ajouter un matériau *</label>
+          <select id="mat" formControlName="materiauId">
+            <option value="">— Choisir —</option>
+            @for (m of materiaux.materiaux(); track m.id) { <option [value]="m.id">{{ m.nom }} ({{ m.unite }})</option> }
+          </select>
+          <app-erreur-champ [controle]="formLigne.controls.materiauId" />
+        </div>
+        <div class="champ">
+          <label for="qte">Quantité *</label>
+          <input id="qte" type="number" min="0" step="any" formControlName="quantite" />
+          <app-erreur-champ [controle]="formLigne.controls.quantite" />
+        </div>
+        <div class="champ">
+          <label for="src">Source de la quantité</label>
+          <select id="src" formControlName="source">
+            <option value="metre_ingenieur">{{ sources.metre_ingenieur }}</option>
+            <option value="hypothese">{{ sources.hypothese }}</option>
+          </select>
+        </div>
+        <div class="champ" style="justify-content: flex-end">
+          <button type="submit" class="btn btn-primaire">Ajouter</button>
+        </div>
+      </form>
+
+      @if (lignesNonReparties().length > 0) {
+        <details class="mt">
+          <summary class="gras">Affecter une ligne de l'estimation non répartie ({{ lignesNonReparties().length }})</summary>
+          <ul class="non-reparties">
+            @for (l of lignesNonReparties(); track l.ligne.id) {
+              <li>
+                <span>{{ l.materiau?.nom }} — {{ l.ligne.quantite | nombre }} {{ l.materiau?.unite }} ({{ l.montant | fcfa }})</span>
+                <button type="button" class="btn btn-sm" (click)="affecter(l.ligne.id)">Affecter à cette phase</button>
+              </li>
+            }
+          </ul>
+        </details>
+      }
+    </section>
+
+    <!-- Éléments liés -->
+    <div class="grille grille-2 section">
+      <section class="carte">
+        <div class="carte-titre"><h2>Main-d'œuvre</h2><a routerLink="/main-oeuvre" class="petit">Gérer</a></div>
+        @for (x of lies().interventions; track x.i.id) {
+          <div class="ligne-liee"><span>{{ x.i.metier }} {{ x.i.prestataire ? '— ' + x.i.prestataire : '' }}</span>
+            <span class="num">{{ x.convenu | fcfa }} <small class="muted">payé {{ x.i.montantPaye | fcfa }}</small></span></div>
+        } @empty { <p class="muted petit">Aucune intervention saisie pour cette phase.</p> }
+      </section>
+      <section class="carte">
+        <div class="carte-titre"><h2>Transports et frais</h2><a routerLink="/depenses" class="petit">Gérer</a></div>
+        @for (d of lies().depenses; track d.id) {
+          <div class="ligne-liee"><span>{{ d.description }} <small class="muted">{{ categoriesDepense[d.categorie] }}</small></span>
+            <span class="num">{{ d.montantPrevu | fcfa }} <small class="muted">payé {{ d.montantPaye | fcfa }}</small></span></div>
+        } @empty { <p class="muted petit">Aucune dépense affectée à cette phase.</p> }
+      </section>
+      <section class="carte">
+        <div class="carte-titre"><h2>Achats de matériaux</h2><a routerLink="/achats-stocks" class="petit">Gérer</a></div>
+        @for (x of lies().achats; track x.a.id) {
+          <div class="ligne-liee"><span>{{ x.nom }} — {{ x.a.quantiteCommandee | nombre }} <small class="muted">{{ x.a.date | dateFr }}</small></span>
+            <span class="num">{{ x.montant | fcfa }} <small class="muted">payé {{ x.a.montantPaye | fcfa }}</small></span></div>
+        } @empty { <p class="muted petit">Aucun achat affecté à cette phase.</p> }
+      </section>
+      <section class="carte">
+        <div class="carte-titre"><h2>Équipements acquis</h2><a routerLink="/equipements" class="petit">Gérer</a></div>
+        @for (x of lies().equipements; track x.e.id) {
+          <div class="ligne-liee"><span>{{ x.e.nom }} <small class="muted">{{ modes[x.e.mode] }}</small></span>
+            <span class="num">{{ x.cout | fcfa }}</span></div>
+        } @empty { <p class="muted petit">Aucun équipement acquis pour cette phase.</p> }
+        <p class="petit muted mt">Un équipement acquis dans une phase précédente est réutilisé sans coût supplémentaire.</p>
+      </section>
+    </div>
+  } @else {
+    <h1>Phase introuvable</h1>
+    <p>Cette phase n'existe pas ou a été supprimée. <a routerLink="/phases">Retour aux phases</a></p>
+  }
+</div>

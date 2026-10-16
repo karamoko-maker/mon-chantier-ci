@@ -1,0 +1,97 @@
+<div class="page">
+  <div class="page-entete">
+    <div>
+      <h1>Paramètres et sauvegarde</h1>
+      <p>Unités, catégories, tarifs de main-d'œuvre, prix des matériaux et sauvegarde des données. Les caractéristiques du bâtiment
+        se modifient dans <a routerLink="/projet">Mon projet</a>.</p>
+    </div>
+  </div>
+
+  @if (!store.synchronise) {
+    <app-bandeau niveau="attention">
+      <strong>Vos données sont enregistrées uniquement dans ce navigateur, sur cet appareil.</strong> Elles ne sont pas synchronisées
+      automatiquement entre votre ordinateur, votre tablette et votre téléphone, et peuvent être perdues si vous effacez les données
+      du navigateur. Exportez régulièrement une sauvegarde JSON.
+    </app-bandeau>
+  }
+
+  <section class="carte">
+    <div class="carte-titre"><h2>Sauvegarde des données</h2></div>
+    <dl class="lignes-def" style="max-width: 560px">
+      <dt>Emplacement</dt><dd>{{ store.libelleStockage }}</dd>
+      <dt>Dernier enregistrement</dt><dd>{{ store.derniereSauvegarde() ? store.derniereSauvegarde()!.toLocaleString('fr-FR') : '—' }}</dd>
+      <dt>Version de l'application</dt><dd>{{ version }}</dd>
+    </dl>
+    @if (store.erreurSauvegarde(); as err) { <app-bandeau niveau="danger">{{ err }}</app-bandeau> }
+    <div class="actions mt">
+      <button type="button" class="btn" (click)="enregistrerMaintenant()">Enregistrer maintenant</button>
+      <button type="button" class="btn btn-primaire" (click)="exporter()">Exporter les données (JSON)</button>
+      <label class="btn" [class.disabled]="importEnCours()">
+        Importer une sauvegarde (JSON)
+        <input type="file" accept=".json,application/json" (change)="importer($event)" hidden />
+      </label>
+      <button type="button" class="btn btn-danger" (click)="reinitialiser()">Revenir aux données initiales</button>
+    </div>
+    <p class="petit muted mt">L'enregistrement est automatique après chaque modification. L'architecture est prête pour une future base
+      de données (PostgreSQL via une API) et des comptes utilisateurs : il suffira de remplacer l'adaptateur de stockage local.</p>
+  </section>
+
+  <div class="grille grille-3 section">
+    @for (l of listes; track l.cle) {
+      <section class="carte">
+        <h2>{{ l.titre }}</h2>
+        <p class="petit muted">{{ l.aide }}</p>
+        <div class="puces mb">
+          @for (v of valeursDe(l.cle); track v) {
+            <span class="puce">{{ v }} <button type="button" (click)="retirer(l.cle, v)" [attr.aria-label]="'Retirer ' + v">×</button></span>
+          }
+        </div>
+        <div class="actions">
+          <input #champ type="text" placeholder="Nouvelle valeur" style="flex: 1; min-width: 120px" (keydown.enter)="ajouter(l.cle, champ)" [attr.aria-label]="'Ajouter : ' + l.titre" />
+          <button type="button" class="btn btn-sm" (click)="ajouter(l.cle, champ)">Ajouter</button>
+        </div>
+      </section>
+    }
+  </div>
+
+  <div class="grille grille-2 section">
+    <section class="carte">
+      <h2>Tarifs de main-d'œuvre de référence</h2>
+      <p class="petit muted">Tarif journalier par métier, pré-rempli lors de la saisie d'une intervention. 0 = à renseigner.</p>
+      <div class="table-conteneur">
+        <table class="tableau">
+          <thead><tr><th>Métier</th><th class="num">Tarif journalier (FCFA)</th></tr></thead>
+          <tbody>
+            @for (t of parametres.tarifsMetiers(); track t.metier) {
+              <tr>
+                <td>{{ t.metier }}</td>
+                <td class="num"><input class="saisie-inline large" type="number" min="0" step="500" [value]="t.tarifJournalier"
+                       (change)="modifierTarif(t.metier, $event)" [attr.aria-label]="'Tarif ' + t.metier" /></td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="carte">
+      <div class="carte-titre"><h2>Prix des matériaux</h2><a routerLink="/materiaux" class="petit">Catalogue complet</a></div>
+      <p class="petit muted">La date de mise à jour est enregistrée automatiquement. Les prix restent indicatifs.</p>
+      <div class="table-conteneur">
+        <table class="tableau">
+          <thead><tr><th>Matériau</th><th>Unité</th><th class="num">Prix (FCFA)</th><th>Mis à jour</th></tr></thead>
+          <tbody>
+            @for (m of materiaux.materiaux(); track m.id) {
+              <tr>
+                <td>{{ m.nom }} @if (m.originePrix === 'a_renseigner') { <span class="badge orange">à renseigner</span> }</td>
+                <td>{{ m.unite }}</td>
+                <td class="num"><input class="saisie-inline" type="number" min="0" [value]="m.prixUnitaire" (change)="modifierPrix(m.id, m.nom, $event)" [attr.aria-label]="'Prix ' + m.nom" /></td>
+                <td class="nowrap petit">{{ m.dateMajPrix | dateFr }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+</div>

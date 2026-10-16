@@ -1,0 +1,152 @@
+<div class="page">
+  <div class="page-entete">
+    <div>
+      <h1>Équipements de chantier</h1>
+      <p>Inventaire du matériel acheté, loué ou déjà disponible. Chaque équipement est compté une seule fois, dans sa phase d'acquisition.</p>
+    </div>
+    <div class="actions">
+      <button type="button" class="btn" (click)="exporterCsv()">Exporter (CSV)</button>
+      <button type="button" class="btn btn-primaire" (click)="ouvrirAjout()">Ajouter un équipement</button>
+    </div>
+  </div>
+
+  <app-bandeau niveau="info">
+    Un équipement déjà acheté est réutilisé dans les phases suivantes <strong>sans être recompté</strong>.
+    Tant que les prix sont à 0, le matériel est couvert par le lot « Matériel de chantier » de l'estimation des matériaux.
+    Si vous renseignez les prix ici, excluez ce lot pour éviter un double comptage.
+  </app-bandeau>
+  @for (a of alertes(); track $index) {
+    <app-bandeau [niveau]="a.niveau">{{ a.message }}</app-bandeau>
+  }
+
+  <div class="grille grille-stats mb">
+    <app-carte-stat libelle="Matériel acheté" [valeur]="fcfa(resume().achete)" />
+    <app-carte-stat libelle="Matériel loué" [valeur]="fcfa(resume().loue)" ton="orange" />
+    <app-carte-stat libelle="Déjà disponible" [valeur]="resume().disponibles + ' équipement(s)'" ton="vert" detail="Sans coût" />
+    <app-carte-stat libelle="Déjà payé" [valeur]="fcfa(resume().paye)" ton="gris" />
+  </div>
+
+  @if (formulaireVisible()) {
+    <form class="carte mb" [formGroup]="form" (ngSubmit)="enregistrer()">
+      <div class="carte-titre"><h2>{{ editionId() ? "Modifier l'équipement" : 'Nouvel équipement' }}</h2></div>
+      <div class="formulaire">
+        <div class="champ">
+          <label for="nom">Équipement *</label>
+          <input id="nom" type="text" formControlName="nom" />
+          <app-erreur-champ [controle]="form.controls.nom" />
+        </div>
+        <div class="champ">
+          <label for="mode">Mode d'acquisition *</label>
+          <select id="mode" formControlName="mode">
+            @for (m of listeModes; track m[0]) { <option [value]="m[0]">{{ m[1] }}</option> }
+          </select>
+        </div>
+        <div class="champ">
+          <label for="qte">Quantité *</label>
+          <input id="qte" type="number" min="0" formControlName="quantite" />
+          <app-erreur-champ [controle]="form.controls.quantite" />
+        </div>
+        @if (form.controls.mode.value === 'achete') {
+          <div class="champ">
+            <label for="prix">Prix d'achat unitaire (FCFA)</label>
+            <input id="prix" type="number" min="0" formControlName="prixAchatUnitaire" />
+          </div>
+        }
+        @if (form.controls.mode.value === 'loue') {
+          <div class="champ">
+            <label for="loc">Coût de location par jour (FCFA)</label>
+            <input id="loc" type="number" min="0" formControlName="coutLocationJournalier" />
+          </div>
+          <div class="champ">
+            <label for="duree">Durée de location (jours)</label>
+            <input id="duree" type="number" min="0" formControlName="dureeLocationJours" />
+          </div>
+        }
+        <div class="champ">
+          <label for="etat">État</label>
+          <select id="etat" formControlName="etat">
+            @for (e of listeEtats; track e[0]) { <option [value]="e[0]">{{ e[1] }}</option> }
+          </select>
+        </div>
+        <div class="champ">
+          <label for="date">Date d'acquisition</label>
+          <input id="date" type="date" formControlName="dateAcquisition" />
+        </div>
+        <div class="champ">
+          <label for="four">Fournisseur / loueur</label>
+          <input id="four" type="text" formControlName="fournisseur" />
+        </div>
+        <div class="champ">
+          <label for="phase">Phase d'acquisition</label>
+          <select id="phase" formControlName="phaseId">
+            <option value="">Non affecté</option>
+            @for (p of phases.phases(); track p.id) { <option [value]="p.id">{{ p.ordre }}. {{ p.nom }}</option> }
+          </select>
+          <span class="aide">Le coût est imputé à cette phase uniquement</span>
+        </div>
+        @if (form.controls.mode.value !== 'disponible') {
+          <div class="champ">
+            <label for="paye">Montant déjà payé (FCFA)</label>
+            <input id="paye" type="number" min="0" formControlName="montantPaye" />
+          </div>
+        }
+        <div class="champ large">
+          <label for="notes">Notes</label>
+          <input id="notes" type="text" formControlName="notes" />
+        </div>
+        <div class="apercu-calcul">Coût de l'équipement : <strong>{{ apercu() | fcfa }}</strong>
+          @if (form.controls.mode.value === 'loue') { <span class="muted"> (quantité × coût journalier × durée)</span> }
+          @if (form.controls.mode.value === 'achete') { <span class="muted"> (quantité × prix d'achat)</span> }
+        </div>
+        <div class="formulaire-actions">
+          <button type="button" class="btn" (click)="annuler()">Annuler</button>
+          <button type="submit" class="btn btn-primaire">Enregistrer</button>
+        </div>
+      </div>
+    </form>
+  }
+
+  <section class="carte">
+    <div class="filtres">
+      <input type="search" placeholder="Rechercher…" [value]="recherche()" (input)="recherche.set(valeur($event))" aria-label="Rechercher" />
+      <select (change)="filtreMode.set(valeur($event))" aria-label="Filtrer par mode">
+        <option value="">Tous les modes</option>
+        @for (m of listeModes; track m[0]) { <option [value]="m[0]">{{ m[1] }}</option> }
+      </select>
+    </div>
+    <div class="table-conteneur">
+      <table class="tableau">
+        <thead>
+          <tr><th>Équipement</th><th>Mode</th><th class="num">Qté</th><th class="num">Prix d'achat</th><th class="num">Location</th>
+            <th class="num">Coût</th><th class="num">Payé</th><th>État</th><th>Acquisition</th><th>Fournisseur</th><th>Phase</th><th></th></tr>
+        </thead>
+        <tbody>
+          @for (x of liste(); track x.equipement.id) {
+            <tr>
+              <td class="gras">{{ x.equipement.nom }}</td>
+              <td><span class="badge" [class.bleu]="x.equipement.mode === 'achete'" [class.orange]="x.equipement.mode === 'loue'"
+                        [class.vert]="x.equipement.mode === 'disponible'">{{ modes[x.equipement.mode] }}</span></td>
+              <td class="num">{{ x.equipement.quantite }}</td>
+              <td class="num">{{ x.equipement.mode === 'achete' ? (x.equipement.prixAchatUnitaire | fcfa) : '—' }}</td>
+              <td class="num">
+                @if (x.equipement.mode === 'loue') { {{ x.equipement.coutLocationJournalier | fcfa }}/j × {{ x.equipement.dureeLocationJours }} j } @else { — }
+              </td>
+              <td class="num gras">{{ x.cout | fcfa }}</td>
+              <td class="num">{{ x.equipement.montantPaye | fcfa }}</td>
+              <td>{{ etats[x.equipement.etat] }}</td>
+              <td class="nowrap">{{ x.equipement.dateAcquisition | dateFr }}</td>
+              <td>{{ x.equipement.fournisseur || '—' }}</td>
+              <td class="petit">{{ phases.nom(x.equipement.phaseId) }}</td>
+              <td class="actions-ligne">
+                <button type="button" class="btn-lien" (click)="ouvrirModification(x.equipement)">Modifier</button>
+                <button type="button" class="btn-lien danger" (click)="supprimer(x.equipement)">Supprimer</button>
+              </td>
+            </tr>
+          } @empty {
+            <tr><td colspan="12" class="vide">Aucun équipement.</td></tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>

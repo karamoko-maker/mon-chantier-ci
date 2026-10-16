@@ -1,0 +1,252 @@
+<div class="page">
+  <div class="page-entete">
+    <div>
+      <h1>Matériaux</h1>
+      <p>Catalogue modifiable et estimation des besoins. Montant = Quantité × Prix unitaire, recalculé automatiquement.</p>
+    </div>
+    <div class="actions">
+      @if (onglet() === 'catalogue') {
+        <button type="button" class="btn" (click)="exporterCsv()">Exporter (CSV)</button>
+        <button type="button" class="btn btn-primaire" (click)="ouvrirAjout()">Ajouter un matériau</button>
+      }
+    </div>
+  </div>
+
+  <app-bandeau niveau="info">
+    Les prix unitaires sont <strong>indicatifs et non garantis</strong> : vérifiez-les auprès de vos fournisseurs et mettez à jour la date.
+    Les matériaux marqués « Prix à renseigner » n'ont pas encore de prix.
+  </app-bandeau>
+
+  <div class="onglets" role="tablist">
+    <button type="button" role="tab" [class.actif]="onglet() === 'catalogue'" (click)="onglet.set('catalogue')">Catalogue</button>
+    <button type="button" role="tab" [class.actif]="onglet() === 'estimation'" (click)="onglet.set('estimation')">
+      Estimation des besoins
+      @if (totauxEstimation().nonValidees > 0) { <span class="badge orange">{{ totauxEstimation().nonValidees }} non validée(s)</span> }
+    </button>
+  </div>
+
+  @if (onglet() === 'catalogue') {
+    @if (formulaireVisible()) {
+      <form class="carte mb" [formGroup]="form" (ngSubmit)="enregistrer()">
+        <div class="carte-titre"><h2>{{ editionId() ? 'Modifier le matériau' : 'Nouveau matériau' }}</h2></div>
+        <div class="formulaire">
+          <div class="champ">
+            <label for="nom">Nom *</label>
+            <input id="nom" type="text" formControlName="nom" />
+            <app-erreur-champ [controle]="form.controls.nom" />
+          </div>
+          <div class="champ">
+            <label for="cat">Catégorie *</label>
+            <select id="cat" formControlName="categorie">
+              @for (c of parametres.categoriesMateriaux(); track c) { <option [value]="c">{{ c }}</option> }
+            </select>
+          </div>
+          <div class="champ">
+            <label for="unite">Unité *</label>
+            <select id="unite" formControlName="unite">
+              @for (u of parametres.unites(); track u) { <option [value]="u">{{ u }}</option> }
+            </select>
+          </div>
+          <div class="champ">
+            <label for="prix">Prix unitaire (FCFA) *</label>
+            <input id="prix" type="number" min="0" step="1" formControlName="prixUnitaire" />
+            <app-erreur-champ [controle]="form.controls.prixUnitaire" />
+          </div>
+          <div class="champ">
+            <label for="origine">Origine du prix</label>
+            <select id="origine" formControlName="originePrix">
+              @for (o of origines; track o[0]) { <option [value]="o[0]">{{ o[1] }}</option> }
+            </select>
+          </div>
+          <div class="champ">
+            <label for="date">Date de mise à jour du prix</label>
+            <input id="date" type="date" formControlName="dateMajPrix" />
+          </div>
+          <div class="champ">
+            <label for="four">Fournisseur</label>
+            <input id="four" type="text" formControlName="fournisseur" />
+          </div>
+          <div class="champ">
+            <label for="seuil">Seuil d'alerte de stock</label>
+            <input id="seuil" type="number" min="0" step="any" formControlName="seuilAlerte" />
+            <span class="aide">0 = pas d'alerte</span>
+          </div>
+          <div class="champ">
+            <span class="label">Élément structurel</span>
+            <label class="case"><input type="checkbox" formControlName="structurel" /> Quantité issue du métré de l'ingénieur</label>
+          </div>
+          <div class="champ large">
+            <label for="notes">Notes</label>
+            <input id="notes" type="text" formControlName="notes" />
+          </div>
+          <div class="formulaire-actions">
+            <button type="button" class="btn" (click)="annuler()">Annuler</button>
+            <button type="submit" class="btn btn-primaire">Enregistrer</button>
+          </div>
+        </div>
+      </form>
+    }
+
+    <section class="carte">
+      <div class="filtres">
+        <input type="search" placeholder="Rechercher un matériau ou un fournisseur…" [value]="recherche()" (input)="recherche.set(valeur($event))" aria-label="Rechercher" />
+        <select (change)="filtreCategorie.set(valeur($event))" aria-label="Filtrer par catégorie">
+          <option value="">Toutes les catégories</option>
+          @for (c of parametres.categoriesMateriaux(); track c) { <option [value]="c">{{ c }}</option> }
+        </select>
+        <span class="muted petit">{{ catalogue().length }} matériau(x)</span>
+      </div>
+      <div class="table-conteneur">
+        <table class="tableau">
+          <thead>
+            <tr>
+              <th>Matériau</th><th>Catégorie</th><th>Unité</th><th class="num">Prix unitaire</th><th>Fournisseur</th><th>Prix du</th>
+              <th class="num">Qté prévue</th><th class="num">Montant prévu</th><th class="num">Qté achetée</th>
+              <th class="num">Qté consommée</th><th class="num">Stock restant</th><th></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (l of catalogue(); track l.m.id) {
+              <tr>
+                <td class="col-nom">
+                  <span class="gras">{{ l.m.nom }}</span>
+                  @if (l.m.originePrix === 'a_renseigner') { <span class="badge orange">Prix à renseigner</span> }
+                  @if (l.m.structurel) { <span class="badge bleu" title="Quantités selon le métré de l'ingénieur">Structurel</span> }
+                  @if (l.m.notes) { <div class="petit muted note">{{ l.m.notes }}</div> }
+                </td>
+                <td>{{ l.m.categorie }}</td>
+                <td>{{ l.m.unite }}</td>
+                <td class="num">
+                  <input class="saisie-inline" type="number" min="0" step="1" [value]="l.m.prixUnitaire"
+                         (change)="modifierPrix(l.m, $event)" [attr.aria-label]="'Prix unitaire ' + l.m.nom" />
+                  <div class="petit muted">{{ libellesOrigine[l.m.originePrix] }}</div>
+                </td>
+                <td>{{ l.m.fournisseur || '—' }}</td>
+                <td class="nowrap">{{ l.m.dateMajPrix | dateFr }}</td>
+                <td class="num">{{ l.stock.prevu | nombre }}</td>
+                <td class="num gras">{{ l.stock.montantPrevu | fcfa }}</td>
+                <td class="num">{{ l.stock.commande | nombre }}</td>
+                <td class="num">{{ l.stock.consomme | nombre }}</td>
+                <td class="num">
+                  {{ l.stock.disponible | nombre }}
+                  @if (l.stock.negatif) { <span class="badge rouge">négatif</span> }
+                  @else if (l.stock.faible) { <span class="badge orange">faible</span> }
+                </td>
+                <td class="actions-ligne">
+                  <button type="button" class="btn-lien" (click)="ouvrirModification(l.m)">Modifier</button>
+                  <button type="button" class="btn-lien danger" (click)="supprimer(l.m)">Supprimer</button>
+                </td>
+              </tr>
+            } @empty {
+              <tr><td colspan="12" class="vide">Aucun matériau ne correspond à la recherche.</td></tr>
+            }
+          </tbody>
+          <tfoot>
+            <tr><td colspan="7">Total prévu (matériaux affichés, lignes incluses au budget)</td><td class="num">{{ totalCatalogue() | fcfa }}</td><td colspan="4"></td></tr>
+          </tfoot>
+        </table>
+      </div>
+      <p class="petit muted mt">Qté prévue = somme des lignes d'estimation incluses. Qté achetée = quantités commandées dans
+        <a routerLink="/achats-stocks">Achats et stocks</a>. Stock restant = reçu − consommé.</p>
+    </section>
+  } @else {
+    @if (totauxEstimation().nonValidees > 0 || !projet.metreValide()) {
+      <app-bandeau niveau="attention">
+        <strong>{{ mention }}.</strong> Ces quantités sont des hypothèses de départ, pas un métré technique validé.
+        Remplacez-les par les quantités des plans d'exécution et du métré de l'ingénieur. Les quantités de béton, de fer et de fondations
+        ne sont jamais calculées par ratio dans l'application.
+      </app-bandeau>
+    }
+
+    <div class="grille grille-3 mb">
+      <div class="carte"><div class="muted petit">Sous-total des lignes incluses</div><div class="gras" style="font-size: 1.2rem">{{ totauxEstimation().inclus | fcfa }}</div></div>
+      <div class="carte"><div class="muted petit">Lignes non validées</div><div class="gras" style="font-size: 1.2rem">{{ totauxEstimation().nonValidees }}</div></div>
+      <div class="carte"><div class="muted petit">Lignes non réparties par phase</div><div class="gras" style="font-size: 1.2rem">{{ totauxEstimation().nonReparties }}</div></div>
+    </div>
+
+    <section class="carte">
+      <div class="carte-titre">
+        <h2>Lignes d'estimation</h2>
+        <button type="button" class="btn btn-sm" (click)="validerTout()">Tout marquer comme validé par l'ingénieur</button>
+      </div>
+      <div class="table-conteneur">
+        <table class="tableau">
+          <thead>
+            <tr><th>Matériau</th><th>Phase</th><th class="num">Quantité</th><th>Unité</th><th class="num">Prix unitaire</th>
+              <th class="num">Montant</th><th>Source</th><th>Validée</th><th>Incluse</th><th></th></tr>
+          </thead>
+          <tbody>
+            @for (l of lignes(); track l.ligne.id) {
+              <tr [class.exclue]="!l.ligne.inclureAuBudget">
+                <td>
+                  {{ l.materiau?.nom ?? 'Matériau supprimé' }}
+                  @if (!l.ligne.valide) { <span class="badge orange">hypothèse</span> }
+                </td>
+                <td>
+                  <select class="saisie-inline" (change)="modifierLigne(l.ligne.id, 'phaseId', $event)" aria-label="Phase">
+                    <option value="" [selected]="l.ligne.phaseId === null">À répartir</option>
+                    @for (p of phases.phases(); track p.id) {
+                      <option [value]="p.id" [selected]="p.id === l.ligne.phaseId">{{ p.ordre }}. {{ p.nom }}</option>
+                    }
+                  </select>
+                </td>
+                <td class="num"><input class="saisie-inline" type="number" min="0" step="any" [value]="l.ligne.quantite"
+                       (change)="modifierLigne(l.ligne.id, 'quantite', $event)" aria-label="Quantité" /></td>
+                <td>{{ l.materiau?.unite }}</td>
+                <td class="num">{{ l.materiau?.prixUnitaire | fcfa }}</td>
+                <td class="num gras">{{ l.montant | fcfa }}</td>
+                <td>
+                  <select class="saisie-inline" style="width: 170px" (change)="modifierLigne(l.ligne.id, 'source', $event)" aria-label="Source">
+                    <option value="hypothese" [selected]="l.ligne.source === 'hypothese'">{{ sources.hypothese }}</option>
+                    <option value="metre_ingenieur" [selected]="l.ligne.source === 'metre_ingenieur'">{{ sources.metre_ingenieur }}</option>
+                  </select>
+                </td>
+                <td><input type="checkbox" [checked]="l.ligne.valide" (change)="modifierLigne(l.ligne.id, 'valide', $event)" aria-label="Validée" /></td>
+                <td><input type="checkbox" [checked]="l.ligne.inclureAuBudget" (change)="modifierLigne(l.ligne.id, 'inclureAuBudget', $event)" aria-label="Incluse au budget" /></td>
+                <td class="actions-ligne"><button type="button" class="btn-lien danger" (click)="supprimerLigne(l.ligne.id, l.materiau?.nom ?? '')">Supprimer</button></td>
+              </tr>
+            } @empty {
+              <tr><td colspan="10" class="vide">Aucune ligne d'estimation.</td></tr>
+            }
+          </tbody>
+          <tfoot>
+            <tr><td colspan="5">Sous-total des lignes incluses au budget</td><td class="num">{{ totauxEstimation().inclus | fcfa }}</td><td colspan="4"></td></tr>
+          </tfoot>
+        </table>
+      </div>
+
+      <h3 class="mt">Ajouter une ligne</h3>
+      <form class="formulaire" [formGroup]="formLigne" (ngSubmit)="ajouterLigne()">
+        <div class="champ">
+          <label for="lmat">Matériau *</label>
+          <select id="lmat" formControlName="materiauId">
+            <option value="">— Choisir —</option>
+            @for (m of service.materiaux(); track m.id) { <option [value]="m.id">{{ m.nom }} ({{ m.unite }})</option> }
+          </select>
+          <app-erreur-champ [controle]="formLigne.controls.materiauId" />
+        </div>
+        <div class="champ">
+          <label for="lphase">Phase</label>
+          <select id="lphase" formControlName="phaseId">
+            <option value="">À répartir plus tard</option>
+            @for (p of phases.phases(); track p.id) { <option [value]="p.id">{{ p.ordre }}. {{ p.nom }}</option> }
+          </select>
+        </div>
+        <div class="champ">
+          <label for="lqte">Quantité *</label>
+          <input id="lqte" type="number" min="0" step="any" formControlName="quantite" />
+          <app-erreur-champ [controle]="formLigne.controls.quantite" />
+        </div>
+        <div class="champ">
+          <label for="lsrc">Source</label>
+          <select id="lsrc" formControlName="source">
+            <option value="hypothese">{{ sources.hypothese }}</option>
+            <option value="metre_ingenieur">{{ sources.metre_ingenieur }}</option>
+          </select>
+        </div>
+        <div class="apercu-calcul">Montant de la ligne : <strong>{{ apercuLigne() | fcfa }}</strong></div>
+        <div class="formulaire-actions"><button type="submit" class="btn btn-primaire">Ajouter la ligne</button></div>
+      </form>
+    </section>
+  }
+</div>

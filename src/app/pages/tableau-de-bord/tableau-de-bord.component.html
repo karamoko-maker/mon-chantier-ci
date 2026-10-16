@@ -1,0 +1,168 @@
+<div class="page">
+  <div class="page-entete">
+    <div>
+      <h1>Tableau de bord</h1>
+      <p>{{ projet.projet().nom }} — {{ projet.projet().typeBatiment }}, {{ projet.projet().ville }}</p>
+    </div>
+    <div class="actions non-imprimable">
+      <a class="btn" routerLink="/rapports">Voir les rapports</a>
+      <a class="btn btn-primaire" routerLink="/depenses">Ajouter une dépense</a>
+    </div>
+  </div>
+
+  @if (!projet.metreValide()) {
+    <app-bandeau niveau="attention">
+      <strong>{{ mention }}.</strong> Les quantités et montants affichés reposent sur des hypothèses de départ.
+      Ils doivent être remplacés par le métré de l'ingénieur. <a routerLink="/projet">Enregistrer la validation</a>
+    </app-bandeau>
+  }
+
+  <!-- Les cinq niveaux de budget -->
+  <section class="carte niveaux" aria-label="Niveaux de budget">
+    <div class="niveau">
+      <span class="etiquette">1. Budget estimatif initial</span>
+      <strong>{{ s().totalEstimatif | fcfa }}</strong>
+      <small>dont réserve {{ s().reserveEstimatif | fcfa }}</small>
+    </div>
+    <div class="niveau">
+      <span class="etiquette">2. Budget validé (étude technique)</span>
+      <strong>{{ s().totalValide | fcfa }}</strong>
+      <small>{{ s().nombrePhasesValidees }} phase(s) validée(s) sur {{ s().phases.length }}</small>
+    </div>
+    <div class="niveau">
+      <span class="etiquette">3. Engagé (commandes, contrats)</span>
+      <strong>{{ s().engage.total | fcfa }}</strong>
+      <small>commandes, contrats et factures</small>
+    </div>
+    <div class="niveau">
+      <span class="etiquette">4. Effectivement payé</span>
+      <strong>{{ s().paye.total | fcfa }}</strong>
+      <small>paiements réels enregistrés</small>
+    </div>
+    <div class="niveau accent">
+      <span class="etiquette">5. Reste à financer</span>
+      <strong>{{ financement.resteAFinancer() | fcfa }}</strong>
+      <small>après épargne disponible</small>
+    </div>
+  </section>
+
+  <section class="grille grille-stats section" aria-label="Indicateurs">
+    <app-carte-stat libelle="Budget total prévisionnel" [valeur]="fcfa(s().totalReference)"
+      [detail]="'Base ' + fcfa(s().baseReference) + ' + réserve ' + s().pourcentageReserve + ' %'" />
+    <app-carte-stat libelle="Budget de la phase actuelle" [valeur]="fcfa(s().phaseActuelle?.reference ?? 0)"
+      [detail]="s().phaseActuelle?.phase?.nom ?? 'Aucune phase en cours'" ton="gris" />
+    <app-carte-stat libelle="Dépenses réellement effectuées" [valeur]="fcfa(s().paye.total)" ton="orange"
+      [detail]="'Engagé : ' + fcfa(s().engage.total)" />
+    <app-carte-stat libelle="Budget restant disponible" [valeur]="fcfa(s().resteBudget)"
+      [ton]="s().resteBudget < 0 ? 'rouge' : 'vert'" detail="Budget de référence − payé" />
+    <app-carte-stat libelle="Avancement des travaux" [valeur]="pourcent(s().avancementGlobal)" detail="Pondéré par le budget des phases">
+      <app-progression [valeur]="s().avancementGlobal" />
+    </app-carte-stat>
+    <app-carte-stat libelle="Matériaux achetés" [valeur]="fcfa(s().engage.materiaux)"
+      [detail]="'Payé : ' + fcfa(s().paye.materiaux)" ton="gris" />
+    <app-carte-stat libelle="Main-d'œuvre" [valeur]="fcfa(s().postes.mainOeuvre)"
+      [detail]="'Convenu : ' + fcfa(s().engage.mainOeuvre) + ' · payé : ' + fcfa(s().paye.mainOeuvre)" ton="gris" />
+    <app-carte-stat libelle="Dépenses de transport" [valeur]="fcfa(s().paye.transport)"
+      [detail]="'Prévu : ' + fcfa(s().postes.transport)" ton="gris" />
+    <app-carte-stat libelle="Dépenses imprévues" [valeur]="fcfa(s().paye.imprevus)"
+      [detail]="'Réserve restante : ' + fcfa(s().reserveRestante)" [ton]="s().reserveRestante < 0 ? 'rouge' : 'gris'" />
+    <app-carte-stat libelle="Déjà épargné pour le projet" [valeur]="fcfa(financement.financement().epargneActuelle)"
+      [detail]="'Disponible pour le chantier : ' + fcfa(financement.disponible())" ton="vert" />
+    <app-carte-stat libelle="Restant à financer" [valeur]="fcfa(financement.resteAFinancer())"
+      [ton]="financement.resteAFinancer() > 0 ? 'orange' : 'vert'" detail="Budget − payé − épargne disponible" />
+  </section>
+
+  <div class="grille grille-2 section">
+    <section class="carte">
+      <div class="carte-titre">
+        <h2>Prochains travaux à réaliser</h2>
+        <a routerLink="/phases" class="petit">Toutes les phases</a>
+      </div>
+      @if (prochains().length === 0) {
+        <p class="muted">Toutes les phases sont terminées.</p>
+      }
+      <ul class="liste-phases">
+        @for (p of prochains(); track p.phase.id) {
+          <li>
+            <a [routerLink]="['/phases', p.phase.id]" class="nom">{{ p.phase.ordre }}. {{ p.phase.nom }}</a>
+            <div class="meta">
+              <span class="badge" [class.bleu]="p.phase.statut === 'en_cours'" [class.rouge]="p.phase.statut === 'bloque'">
+                {{ statuts[p.phase.statut] }}</span>
+              <span>{{ p.reference | fcfa }}</span>
+              @if (p.phase.dateDebut) { <span class="muted">début {{ p.phase.dateDebut | dateFr }}</span> }
+              @if (p.financable) {
+                <span class="muted">finançable : {{ p.financable | mois }}</span>
+              } @else if (p.financable === null) {
+                <span class="badge orange">financement au-delà de l'horizon</span>
+              }
+            </div>
+            <app-progression [valeur]="p.phase.avancement" />
+          </li>
+        }
+      </ul>
+    </section>
+
+    <section class="carte">
+      <div class="carte-titre">
+        <h2>Contrôles et alertes</h2>
+        <span class="badge" [class.rouge]="nombreAlertes() > 0">{{ nombreAlertes() }}</span>
+      </div>
+      @if (alertes().length === 0) {
+        <p class="muted">Aucune incohérence détectée.</p>
+      }
+      <ul class="alertes">
+        @for (a of alertes(); track $index) {
+          <li [class]="a.niveau">
+            <span class="module">{{ a.module }}</span>
+            <a [routerLink]="a.lien">{{ a.message }}</a>
+          </li>
+        }
+      </ul>
+    </section>
+  </div>
+
+  <div class="grille grille-3 section">
+    <section class="carte">
+      <h2>Répartition du budget</h2>
+      <app-graphique [config]="graphiqueRepartition()" [hauteur]="290" titre="Répartition du budget par catégorie" />
+    </section>
+    <section class="carte">
+      <h2>Évolution des dépenses</h2>
+      @if (evolution().length === 0) {
+        <p class="vide">Aucun paiement enregistré pour l'instant.<br />Les paiements des achats, de la main-d'œuvre et des dépenses apparaîtront ici.</p>
+      } @else {
+        <app-graphique [config]="graphiqueEvolution()" [hauteur]="290" titre="Évolution des dépenses" />
+      }
+    </section>
+    <section class="carte">
+      <h2>Budget prévu / dépenses réelles</h2>
+      <app-graphique [config]="graphiqueComparaison()" [hauteur]="290" titre="Comparaison budget et dépenses" />
+    </section>
+  </div>
+
+  <section class="carte section">
+    <div class="carte-titre"><h2>Postes qui dépassent le budget</h2></div>
+    @if (depassements().length === 0) {
+      <p class="muted">Aucun dépassement constaté ni prévisible.</p>
+    } @else {
+      <div class="table-conteneur">
+        <table class="tableau">
+          <thead><tr><th>Phase</th><th class="num">Budget</th><th class="num">Engagé</th><th class="num">Payé</th><th class="num">Écart</th><th>Situation</th></tr></thead>
+          <tbody>
+            @for (p of depassements(); track p.phase.id) {
+              <tr>
+                <td><a [routerLink]="['/phases', p.phase.id]">{{ p.phase.ordre }}. {{ p.phase.nom }}</a></td>
+                <td class="num">{{ p.reference | fcfa }}</td>
+                <td class="num">{{ p.engage | fcfa }}</td>
+                <td class="num">{{ p.paye | fcfa }}</td>
+                <td class="num positif">{{ p.ecart | fcfa }}</td>
+                <td><span class="badge" [class.rouge]="p.depassement === 'constate'" [class.orange]="p.depassement === 'previsible'">
+                  {{ p.depassement === 'constate' ? 'Dépassement constaté' : 'Dépassement prévisible' }}</span></td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </section>
+</div>

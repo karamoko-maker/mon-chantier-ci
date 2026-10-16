@@ -1,0 +1,262 @@
+<div class="page">
+  <div class="page-entete">
+    <div>
+      <h1>Main-d'œuvre</h1>
+      <p>Ouvriers et prestataires. Coût = Nombre de personnes × Tarif journalier × Nombre de jours. Reste à payer = Montant convenu − Montant payé.</p>
+    </div>
+    <div class="actions">
+      <button type="button" class="btn" (click)="exporterCsv()">Exporter (CSV)</button>
+      <button type="button" class="btn btn-primaire" (click)="onglet.set('interventions'); ouvrirAjout()">Ajouter une intervention</button>
+    </div>
+  </div>
+
+  @for (a of alertes(); track $index) {
+    <app-bandeau [niveau]="a.niveau">{{ a.message }}</app-bandeau>
+  }
+
+  <div class="onglets" role="tablist">
+    <button type="button" role="tab" [class.actif]="onglet() === 'interventions'" (click)="onglet.set('interventions')">Interventions</button>
+    <button type="button" role="tab" [class.actif]="onglet() === 'enveloppes'" (click)="onglet.set('enveloppes')">Enveloppes de planification</button>
+    <button type="button" role="tab" [class.actif]="onglet() === 'recap'" (click)="onglet.set('recap')">Récapitulatif</button>
+  </div>
+
+  @if (onglet() === 'interventions') {
+    @if (formulaireVisible()) {
+      <form class="carte mb" [formGroup]="form" (ngSubmit)="enregistrer()">
+        <div class="carte-titre"><h2>{{ editionId() ? "Modifier l'intervention" : 'Nouvelle intervention' }}</h2></div>
+        <div class="formulaire">
+          <div class="champ">
+            <label for="metier">Métier *</label>
+            <select id="metier" formControlName="metier" (change)="changerMetier()">
+              @for (m of metiers; track m) { <option [value]="m">{{ m }}</option> }
+            </select>
+          </div>
+          <div class="champ">
+            <label for="prest">Prestataire / chef d'équipe</label>
+            <input id="prest" type="text" formControlName="prestataire" />
+          </div>
+          <div class="champ">
+            <label for="phase">Phase concernée</label>
+            <select id="phase" formControlName="phaseId">
+              <option value="">Tout le chantier (non affecté)</option>
+              @for (p of phases.phases(); track p.id) { <option [value]="p.id">{{ p.ordre }}. {{ p.nom }}</option> }
+            </select>
+          </div>
+          <div class="champ">
+            <label for="date">Date de l'intervention *</label>
+            <input id="date" type="date" formControlName="date" />
+            <app-erreur-champ [controle]="form.controls.date" />
+          </div>
+          <div class="champ">
+            <label for="mode">Rémunération *</label>
+            <select id="mode" formControlName="mode">
+              <option value="journalier">Tarif journalier</option>
+              <option value="forfait">Forfait (devis)</option>
+            </select>
+          </div>
+          @if (form.controls.mode.value === 'journalier') {
+            <div class="champ">
+              <label for="pers">Nombre de personnes *</label>
+              <input id="pers" type="number" min="1" formControlName="nombrePersonnes" />
+              <app-erreur-champ [controle]="form.controls.nombrePersonnes" />
+            </div>
+            <div class="champ">
+              <label for="tarif">Tarif journalier (FCFA) *</label>
+              <input id="tarif" type="number" min="0" formControlName="tarifJournalier" />
+              <span class="aide">Pré-rempli depuis les paramètres</span>
+            </div>
+            <div class="champ">
+              <label for="jours">Nombre de jours *</label>
+              <input id="jours" type="number" min="0" step="0.5" formControlName="nombreJours" />
+            </div>
+            <div class="champ">
+              <label for="hs">Heures supplémentaires (total)</label>
+              <input id="hs" type="number" min="0" step="0.5" formControlName="heuresSupplementaires" />
+            </div>
+            <div class="champ">
+              <label for="ths">Tarif horaire des heures sup. (FCFA)</label>
+              <input id="ths" type="number" min="0" formControlName="tarifHoraireSup" />
+            </div>
+          } @else {
+            <div class="champ">
+              <label for="forfait">Montant du forfait (FCFA) *</label>
+              <input id="forfait" type="number" min="0" formControlName="montantForfait" />
+            </div>
+            <div class="champ large">
+              <span class="label">Prestations déjà couvertes par ce forfait (contrôle des doubles comptages)</span>
+              <div class="puces">
+                @for (m of metiers; track m) {
+                  @if (m !== form.controls.metier.value) {
+                    <label class="case puce" style="padding-right: 0.7rem">
+                      <input type="checkbox" [checked]="(form.controls.prestationsCouvertes.value ?? []).includes(m)" (change)="basculerCouverture(m, $event)" /> {{ m }}
+                    </label>
+                  }
+                }
+              </div>
+              <span class="aide">Les enveloppes de planification de ces métiers seront automatiquement exclues du budget.</span>
+            </div>
+          }
+          <div class="champ">
+            <label for="paye">Acomptes / montant déjà payé (FCFA)</label>
+            <input id="paye" type="number" min="0" formControlName="montantPaye" />
+          </div>
+          <div class="champ large">
+            <label for="com">Commentaire</label>
+            <input id="com" type="text" formControlName="commentaire" />
+          </div>
+          <div class="apercu-calcul">
+            Montant convenu : <strong>{{ apercu().convenu | fcfa }}</strong> · Reste à payer :
+            <strong [class.positif]="apercu().reste < 0">{{ apercu().reste | fcfa }}</strong>
+          </div>
+          <div class="formulaire-actions">
+            <button type="button" class="btn" (click)="annuler()">Annuler</button>
+            <button type="submit" class="btn btn-primaire">Enregistrer</button>
+          </div>
+        </div>
+      </form>
+    }
+
+    <section class="carte">
+      <div class="filtres">
+        <select (change)="filtreMetier.set(valeur($event))" aria-label="Filtrer par métier">
+          <option value="">Tous les métiers</option>
+          @for (m of metiers; track m) { <option [value]="m">{{ m }}</option> }
+        </select>
+        <select (change)="filtrePhase.set(valeur($event))" aria-label="Filtrer par phase">
+          <option value="">Toutes les phases</option>
+          @for (p of phases.phases(); track p.id) { <option [value]="p.id">{{ p.ordre }}. {{ p.nom }}</option> }
+        </select>
+      </div>
+      <div class="table-conteneur">
+        <table class="tableau">
+          <thead>
+            <tr><th>Date</th><th>Métier</th><th>Phase</th><th>Détail</th><th class="num">Convenu</th><th class="num">Payé</th><th class="num">Reste</th><th></th></tr>
+          </thead>
+          <tbody>
+            @for (x of interventions(); track x.intervention.id) {
+              <tr>
+                <td class="nowrap">{{ x.intervention.date | dateFr }}</td>
+                <td><span class="gras">{{ x.intervention.metier }}</span>
+                  @if (x.intervention.prestataire) { <div class="petit muted">{{ x.intervention.prestataire }}</div> }</td>
+                <td class="petit">{{ phases.nom(x.intervention.phaseId) }}</td>
+                <td class="petit">
+                  @if (x.intervention.mode === 'forfait') {
+                    <span class="badge bleu">Forfait</span>
+                    @if (x.intervention.prestationsCouvertes.length) { <div class="muted">Couvre : {{ x.intervention.prestationsCouvertes.join(', ') }}</div> }
+                  } @else {
+                    {{ x.intervention.nombrePersonnes }} pers. × {{ x.intervention.tarifJournalier | fcfa }} × {{ x.intervention.nombreJours | nombre }} j
+                    @if (x.intervention.heuresSupplementaires) { + {{ x.intervention.heuresSupplementaires | nombre }} h sup. }
+                  }
+                </td>
+                <td class="num gras">{{ x.convenu | fcfa }}</td>
+                <td class="num">{{ x.intervention.montantPaye | fcfa }}</td>
+                <td class="num" [class.positif]="x.reste < 0">{{ x.reste | fcfa }}</td>
+                <td class="actions-ligne">
+                  <button type="button" class="btn-lien" (click)="ouvrirModification(x.intervention)">Modifier</button>
+                  <button type="button" class="btn-lien danger" (click)="supprimer(x.intervention)">Supprimer</button>
+                </td>
+              </tr>
+            } @empty {
+              <tr><td colspan="8" class="vide">Aucune intervention. Les enveloppes de planification servent de budget en attendant.</td></tr>
+            }
+          </tbody>
+          <tfoot>
+            <tr><td colspan="4">Total</td><td class="num">{{ totaux().convenu | fcfa }}</td><td class="num">{{ totaux().paye | fcfa }}</td><td class="num">{{ totaux().reste | fcfa }}</td><td></td></tr>
+          </tfoot>
+        </table>
+      </div>
+    </section>
+  }
+
+  @if (onglet() === 'enveloppes') {
+    <app-bandeau niveau="info">
+      Ces enveloppes sont des <strong>budgets de planification indicatifs</strong>, pas des devis. Elles sont comptées au budget tant
+      qu'aucune intervention réelle n'est saisie pour le métier, et automatiquement exclues si un forfait couvre déjà la prestation.
+    </app-bandeau>
+    <section class="carte">
+      <div class="table-conteneur">
+        <table class="tableau">
+          <thead>
+            <tr><th>Poste</th><th class="num">Minimum</th><th class="num">Maximum</th><th class="num">Montant retenu</th><th>Phase</th><th>Inclure</th><th>Situation</th><th></th></tr>
+          </thead>
+          <tbody>
+            @for (s of service.enveloppes(); track s.enveloppe.id) {
+              <tr [class.exclue]="!s.comptee">
+                <td class="gras">{{ s.enveloppe.metier }}</td>
+                <td class="num"><input class="saisie-inline" type="number" min="0" [value]="s.enveloppe.montantMin" (change)="modifierEnveloppe(s.enveloppe, 'montantMin', $event)" aria-label="Minimum" /></td>
+                <td class="num"><input class="saisie-inline" type="number" min="0" [value]="s.enveloppe.montantMax" (change)="modifierEnveloppe(s.enveloppe, 'montantMax', $event)" aria-label="Maximum" /></td>
+                <td class="num"><input class="saisie-inline" type="number" min="0" [value]="s.enveloppe.montantRetenu" (change)="modifierEnveloppe(s.enveloppe, 'montantRetenu', $event)" aria-label="Montant retenu" /></td>
+                <td>
+                  <select class="saisie-inline" (change)="modifierEnveloppe(s.enveloppe, 'phaseId', $event)" aria-label="Phase">
+                    <option value="" [selected]="s.enveloppe.phaseId === null">Tout le chantier</option>
+                    @for (p of phases.phases(); track p.id) { <option [value]="p.id" [selected]="p.id === s.enveloppe.phaseId">{{ p.ordre }}. {{ p.nom }}</option> }
+                  </select>
+                </td>
+                <td><input type="checkbox" [checked]="s.enveloppe.inclureAuBudget" (change)="modifierEnveloppe(s.enveloppe, 'inclureAuBudget', $event)" aria-label="Inclure au budget" /></td>
+                <td><span class="badge" [class.vert]="s.comptee" [class.orange]="!s.comptee">{{ s.raison }}</span></td>
+                <td class="actions-ligne"><button type="button" class="btn-lien danger" (click)="supprimerEnveloppe(s.enveloppe)">Supprimer</button></td>
+              </tr>
+            }
+          </tbody>
+          <tfoot>
+            <tr><td>Total</td><td class="num">{{ totauxEnveloppes().min | fcfa }}</td><td class="num">{{ totauxEnveloppes().max | fcfa }}</td>
+              <td class="num" colspan="5" style="text-align: left">Compté au budget : {{ totauxEnveloppes().comptees | fcfa }}</td></tr>
+          </tfoot>
+        </table>
+      </div>
+      <h3 class="mt">Ajouter une enveloppe</h3>
+      <form class="formulaire" [formGroup]="formEnveloppe" (ngSubmit)="ajouterEnveloppe()">
+        <div class="champ">
+          <label for="emet">Métier</label>
+          <select id="emet" formControlName="metier">@for (m of metiers; track m) { <option [value]="m">{{ m }}</option> }</select>
+        </div>
+        <div class="champ"><label for="emin">Minimum (FCFA)</label><input id="emin" type="number" min="0" formControlName="montantMin" /></div>
+        <div class="champ"><label for="emax">Maximum (FCFA)</label><input id="emax" type="number" min="0" formControlName="montantMax" /></div>
+        <div class="champ">
+          <label for="ephase">Phase</label>
+          <select id="ephase" formControlName="phaseId">
+            <option value="">Tout le chantier</option>
+            @for (p of phases.phases(); track p.id) { <option [value]="p.id">{{ p.ordre }}. {{ p.nom }}</option> }
+          </select>
+        </div>
+        <div class="formulaire-actions"><button type="submit" class="btn btn-primaire">Ajouter</button></div>
+      </form>
+    </section>
+  }
+
+  @if (onglet() === 'recap') {
+    <div class="grille grille-2">
+      <section class="carte">
+        <h2>Par métier</h2>
+        <div class="table-conteneur">
+          <table class="tableau">
+            <thead><tr><th>Métier</th><th class="num">Interv.</th><th class="num">Convenu</th><th class="num">Enveloppes</th><th class="num">Payé</th><th class="num">Reste</th></tr></thead>
+            <tbody>
+              @for (l of service.recapParMetier(); track l.cle) {
+                <tr><td>{{ l.libelle }}</td><td class="num">{{ l.nombreInterventions }}</td><td class="num">{{ l.convenu | fcfa }}</td>
+                  <td class="num">{{ l.enveloppes | fcfa }}</td><td class="num">{{ l.paye | fcfa }}</td><td class="num">{{ l.reste | fcfa }}</td></tr>
+              } @empty { <tr><td colspan="6" class="vide">Aucune donnée.</td></tr> }
+            </tbody>
+            <tfoot><tr><td colspan="2">Total</td><td class="num">{{ totalRecap().convenu | fcfa }}</td><td class="num">{{ totalRecap().enveloppes | fcfa }}</td>
+              <td class="num">{{ totalRecap().paye | fcfa }}</td><td class="num">{{ totalRecap().reste | fcfa }}</td></tr></tfoot>
+          </table>
+        </div>
+      </section>
+      <section class="carte">
+        <h2>Par phase</h2>
+        <div class="table-conteneur">
+          <table class="tableau">
+            <thead><tr><th>Phase</th><th class="num">Convenu</th><th class="num">Enveloppes</th><th class="num">Payé</th><th class="num">Reste</th></tr></thead>
+            <tbody>
+              @for (l of service.recapParPhase(); track l.cle) {
+                <tr><td>{{ l.libelle }}</td><td class="num">{{ l.convenu | fcfa }}</td><td class="num">{{ l.enveloppes | fcfa }}</td>
+                  <td class="num">{{ l.paye | fcfa }}</td><td class="num">{{ l.reste | fcfa }}</td></tr>
+              } @empty { <tr><td colspan="5" class="vide">Aucune donnée.</td></tr> }
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+    <p class="petit muted mt">Budget de main-d'œuvre prévu = montants convenus des interventions + enveloppes comptées (sans double comptage).</p>
+  }
+</div>

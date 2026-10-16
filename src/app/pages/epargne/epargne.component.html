@@ -1,0 +1,203 @@
+<div class="page">
+  <div class="page-entete">
+    <div>
+      <h1>Épargne et financement</h1>
+      <p>Financer la construction progressivement : montant disponible, reste à financer, délai pour atteindre un objectif et
+        calendrier des phases finançables.</p>
+    </div>
+    <div class="actions">
+      <button type="button" class="btn" (click)="exporterCalendrier()">Exporter le calendrier (CSV)</button>
+    </div>
+  </div>
+
+  <app-bandeau niveau="info">
+    <strong>Un revenu futur n'est jamais considéré comme disponible.</strong> Les revenus exceptionnels prévus ne sont comptés dans le
+    calendrier qu'à partir du mois suivant leur date ; une fois reçus, ajoutez-les à votre épargne actuelle.
+  </app-bandeau>
+
+  <div class="grille grille-stats mb">
+    <app-carte-stat libelle="Épargne actuelle" [valeur]="fcfa(service.financement().epargneActuelle)" />
+    <app-carte-stat libelle="Disponible pour le chantier" [valeur]="fcfa(service.disponible())" ton="vert"
+      [detail]="'Après ' + fcfa(service.financement().reservePersonnelle) + ' préservés'" />
+    <app-carte-stat libelle="Reste à financer" [valeur]="fcfa(service.resteAFinancer())" [ton]="service.resteAFinancer() > 0 ? 'orange' : 'vert'"
+      [detail]="'Budget ' + fcfa(s().totalReference) + ' − payé ' + fcfa(s().paye.total)" />
+    <app-carte-stat libelle="Financement complet estimé"
+      [valeur]="moisFinancementTotal() ? (moisFinancementTotal()!.mois === 0 ? 'Déjà couvert' : moisFinancementTotal()!.mois + ' mois') : 'Non atteignable'"
+      [detail]="moisFinancementTotal() ? ('Vers ' + (moisFinancementTotal()!.date | mois: true)) : 'Renseignez une capacité d’épargne mensuelle'"
+      [ton]="moisFinancementTotal() ? 'bleu' : 'rouge'" />
+  </div>
+
+  <div class="grille grille-2">
+    <form class="carte" [formGroup]="form" (ngSubmit)="enregistrer()">
+      <div class="carte-titre"><h2>Ma situation</h2></div>
+      <div class="formulaire">
+        <div class="champ">
+          <label for="ep">Épargne actuelle (FCFA) *</label>
+          <input id="ep" type="number" min="0" formControlName="epargneActuelle" />
+          <span class="aide">Argent réellement disponible aujourd'hui</span>
+        </div>
+        <div class="champ">
+          <label for="cap">Capacité d'épargne mensuelle (FCFA) *</label>
+          <input id="cap" type="number" min="0" formControlName="capaciteMensuelle" />
+        </div>
+        <div class="champ">
+          <label for="res">Dépenses personnelles à préserver (FCFA) *</label>
+          <input id="res" type="number" min="0" formControlName="reservePersonnelle" />
+          <span class="aide">Montant à ne jamais utiliser pour le chantier</span>
+        </div>
+        <div class="champ">
+          <label for="debut">Début du calendrier *</label>
+          <input id="debut" type="month" formControlName="moisDebut" />
+        </div>
+        <div class="champ">
+          <label for="hor">Horizon (mois) *</label>
+          <input id="hor" type="number" min="1" max="240" formControlName="horizonMois" />
+          <app-erreur-champ [controle]="form.controls.horizonMois" />
+        </div>
+        <div class="champ">
+          <span class="label">Réserve pour imprévus</span>
+          <label class="case"><input type="checkbox" formControlName="inclureReserveDansBesoins" /> L'inclure dans les besoins à financer</label>
+        </div>
+        <div class="formulaire-actions">
+          <button type="button" class="btn" (click)="annuler()" [disabled]="form.pristine">Annuler</button>
+          <button type="submit" class="btn btn-primaire">Enregistrer</button>
+        </div>
+      </div>
+    </form>
+
+    <section class="carte">
+      <div class="carte-titre">
+        <h2>Revenus exceptionnels prévus</h2>
+        <button type="button" class="btn btn-sm" (click)="ouvrirRevenu()">Ajouter</button>
+      </div>
+      @if (formRevenuVisible()) {
+        <form class="formulaire mb" [formGroup]="formRevenu" (ngSubmit)="enregistrerRevenu()">
+          <div class="champ"><label for="rl">Libellé *</label><input id="rl" type="text" formControlName="libelle" placeholder="Prime, tontine, vente…" />
+            <app-erreur-champ [controle]="formRevenu.controls.libelle" /></div>
+          <div class="champ"><label for="rm">Montant (FCFA) *</label><input id="rm" type="number" min="1" formControlName="montant" />
+            <app-erreur-champ [controle]="formRevenu.controls.montant" /></div>
+          <div class="champ"><label for="rd">Date prévue *</label><input id="rd" type="date" formControlName="datePrevue" /></div>
+          <div class="formulaire-actions">
+            <button type="button" class="btn" (click)="formRevenuVisible.set(false)">Annuler</button>
+            <button type="submit" class="btn btn-primaire">Enregistrer</button>
+          </div>
+        </form>
+      }
+      @for (r of service.revenus(); track r.id) {
+        <div class="ligne-liee">
+          <span>
+            <span class="gras">{{ r.libelle }}</span>
+            <small class="muted">prévu le {{ r.datePrevue | dateFr }}</small>
+            @if (r.recu) { <span class="badge vert">Reçu</span> } @else { <span class="badge orange">Prévu — non disponible</span> }
+          </span>
+          <span class="num">
+            {{ r.montant | fcfa }}
+            <small>
+              @if (!r.recu) { <button type="button" class="btn-lien" (click)="recevoir(r)">Reçu</button> }
+              <button type="button" class="btn-lien" (click)="ouvrirRevenu(r)">Modifier</button>
+              <button type="button" class="btn-lien danger" (click)="supprimerRevenu(r)">Supprimer</button>
+            </small>
+          </span>
+        </div>
+      } @empty {
+        <p class="muted petit">Aucun revenu exceptionnel prévu.</p>
+      }
+    </section>
+  </div>
+
+  <section class="carte section">
+    <div class="carte-titre">
+      <h2>Objectifs d'épargne</h2>
+      <button type="button" class="btn btn-sm" (click)="ouvrirObjectif()">Ajouter un objectif</button>
+    </div>
+    @if (formObjectifVisible()) {
+      <form class="formulaire mb" [formGroup]="formObjectif" (ngSubmit)="enregistrerObjectif()">
+        <div class="champ"><label for="ol">Libellé *</label><input id="ol" type="text" formControlName="libelle" placeholder="Ex. : Gros œuvre RDC + R+1" />
+          <app-erreur-champ [controle]="formObjectif.controls.libelle" /></div>
+        <div class="champ"><label for="od">Date à laquelle je souhaite financer ces travaux</label><input id="od" type="date" formControlName="dateSouhaitee" /></div>
+        <div class="champ"><label for="om">Montant cible (FCFA)</label><input id="om" type="number" min="0" formControlName="montantManuel" placeholder="Calculé depuis les phases" />
+          <span class="aide">Laisser vide pour utiliser les phases cochées</span></div>
+        <div class="champ large">
+          <span class="label">Phases concernées</span>
+          <div class="puces">
+            @for (p of phases.phases(); track p.id) {
+              <label class="case puce" style="padding-right: 0.7rem">
+                <input type="checkbox" [checked]="(formObjectif.controls.phaseIds.value ?? []).includes(p.id)" (change)="basculerPhase(p.id, $event)" />
+                {{ p.ordre }}. {{ p.nom }}
+              </label>
+            }
+          </div>
+        </div>
+        <div class="formulaire-actions">
+          <button type="button" class="btn" (click)="formObjectifVisible.set(false)">Annuler</button>
+          <button type="submit" class="btn btn-primaire">Enregistrer</button>
+        </div>
+      </form>
+    }
+    <div class="table-conteneur">
+      <table class="tableau">
+        <thead><tr><th>Objectif</th><th class="num">Montant</th><th>Date souhaitée</th><th>Atteint dans</th><th>Atteint vers</th><th>Situation</th><th></th></tr></thead>
+        <tbody>
+          @for (o of service.objectifsEvalues(); track o.objectif.id) {
+            <tr>
+              <td><span class="gras">{{ o.objectif.libelle }}</span>
+                @if (o.objectif.phaseIds.length) { <div class="petit muted">{{ o.objectif.phaseIds.length }} phase(s)</div> }</td>
+              <td class="num">{{ o.montant | fcfa }}</td>
+              <td>{{ o.objectif.dateSouhaitee | dateFr }}</td>
+              <td>{{ o.mois === null ? '—' : o.mois === 0 ? 'Déjà atteint' : o.mois + ' mois' }}</td>
+              <td>{{ o.moisAtteinte | mois: true }}</td>
+              <td>
+                @if (o.mois === null) { <span class="badge rouge">Non atteignable dans l'horizon</span> }
+                @else if (o.aTemps === true) { <span class="badge vert">À temps</span> }
+                @else if (o.aTemps === false) { <span class="badge orange">En retard sur la date souhaitée</span> }
+                @else { <span class="muted petit">—</span> }
+              </td>
+              <td class="actions-ligne">
+                <button type="button" class="btn-lien" (click)="ouvrirObjectif(o.objectif)">Modifier</button>
+                <button type="button" class="btn-lien danger" (click)="supprimerObjectif(o.objectif)">Supprimer</button>
+              </td>
+            </tr>
+          } @empty {
+            <tr><td colspan="7" class="vide">Aucun objectif. Exemple : financer la tranche 1 (gros œuvre RDC + R+1) avant une date donnée.</td></tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="carte section">
+    <div class="carte-titre">
+      <h2>Calendrier mensuel de financement</h2>
+      <label class="case petit"><input type="checkbox" [checked]="calendrierComplet()" (change)="calendrierComplet.set(!calendrierComplet())" /> Afficher tous les mois</label>
+    </div>
+    <p class="petit muted">Les besoins sont financés dans l'ordre des phases (éléments non répartis d'abord).
+      Une phase devient « lançable » quand les fonds cumulés couvrent toutes les phases jusqu'à elle
+      @if (service.financement().inclureReserveDansBesoins) { (réserve pour imprévus incluse) }.</p>
+    <app-graphique [config]="graphique()" [hauteur]="260" titre="Fonds cumulés et besoins financés" />
+    @if (besoinsNonFinances().length > 0) {
+      <app-bandeau niveau="attention">
+        {{ besoinsNonFinances().length }} besoin(s) ne sont pas finançables dans l'horizon de {{ service.financement().horizonMois }} mois
+        (premier : {{ besoinsNonFinances()[0].libelle }}).
+      </app-bandeau>
+    }
+    <div class="table-conteneur mt">
+      <table class="tableau">
+        <thead><tr><th>Mois</th><th class="num">Apport épargne</th><th class="num">Revenus except.</th><th class="num">Fonds cumulés</th><th class="num">Besoins financés</th><th>Travaux pouvant être lancés</th></tr></thead>
+        <tbody>
+          @for (l of lignesCalendrier(); track l.index) {
+            <tr [class.selection]="l.nouveauxBesoins.length > 0">
+              <td class="nowrap">{{ l.mois | mois: true }} @if (l.index === 0) { <span class="badge">aujourd'hui</span> }</td>
+              <td class="num">{{ l.apportEpargne | fcfa }}</td>
+              <td class="num">{{ l.apportRevenus ? (l.apportRevenus | fcfa) : '—' }}</td>
+              <td class="num gras">{{ l.fondsCumules | fcfa }}</td>
+              <td class="num">{{ l.besoinCumuleFinance | fcfa }}</td>
+              <td class="petit">
+                @for (b of l.nouveauxBesoins; track b.id) { <div>✔ {{ b.libelle }} <span class="muted">({{ b.montant | fcfa }})</span></div> }
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>

@@ -1,0 +1,241 @@
+<div class="page">
+  <div class="page-entete">
+    <div>
+      <h1>Achats et stocks</h1>
+      <p>Suivi des commandes, livraisons, paiements aux fournisseurs et consommations. Stock disponible = quantité reçue − quantité consommée.</p>
+    </div>
+    <div class="actions">
+      <button type="button" class="btn" (click)="exporterCsv()">Exporter (CSV)</button>
+      @if (onglet() === 'sorties') {
+        <button type="button" class="btn btn-primaire" (click)="ouvrirSortie()">Ajouter une sortie</button>
+      } @else {
+        <button type="button" class="btn btn-primaire" (click)="onglet.set('achats'); ouvrirAjout()">Ajouter un achat</button>
+      }
+    </div>
+  </div>
+
+  @for (a of alertes(); track $index) {
+    <app-bandeau [niveau]="a.niveau">{{ a.message }}</app-bandeau>
+  }
+
+  <div class="grille grille-stats mb">
+    <app-carte-stat libelle="Montant des achats" [valeur]="fcfa(totaux().montant)" detail="Commandes passées" />
+    <app-carte-stat libelle="Payé aux fournisseurs" [valeur]="fcfa(totaux().paye)" ton="vert" />
+    <app-carte-stat libelle="Reste à payer aux fournisseurs" [valeur]="fcfa(totaux().solde)" [ton]="totaux().solde > 0 ? 'orange' : 'gris'" />
+  </div>
+
+  <div class="onglets" role="tablist">
+    <button type="button" role="tab" [class.actif]="onglet() === 'achats'" (click)="onglet.set('achats')">Achats</button>
+    <button type="button" role="tab" [class.actif]="onglet() === 'sorties'" (click)="onglet.set('sorties')">Sorties de stock</button>
+    <button type="button" role="tab" [class.actif]="onglet() === 'stocks'" (click)="onglet.set('stocks')">État des stocks</button>
+  </div>
+
+  @if (onglet() === 'achats') {
+    @if (formulaireVisible()) {
+      <form class="carte mb" [formGroup]="form" (ngSubmit)="enregistrer()">
+        <div class="carte-titre"><h2>{{ editionId() ? "Modifier l'achat" : 'Nouvel achat' }}</h2></div>
+        <div class="formulaire">
+          <div class="champ">
+            <label for="date">Date d'achat *</label>
+            <input id="date" type="date" formControlName="date" />
+          </div>
+          <div class="champ">
+            <label for="mat">Matériau *</label>
+            <select id="mat" formControlName="materiauId" (change)="choisirMateriau()">
+              <option value="">— Choisir —</option>
+              @for (m of materiaux.materiaux(); track m.id) { <option [value]="m.id">{{ m.nom }} ({{ m.unite }})</option> }
+            </select>
+            <app-erreur-champ [controle]="form.controls.materiauId" />
+          </div>
+          <div class="champ">
+            <label for="phase">Phase</label>
+            <select id="phase" formControlName="phaseId">
+              <option value="">Non affecté</option>
+              @for (p of phases.phases(); track p.id) { <option [value]="p.id">{{ p.ordre }}. {{ p.nom }}</option> }
+            </select>
+          </div>
+          <div class="champ">
+            <label for="qc">Quantité commandée *</label>
+            <input id="qc" type="number" min="0" step="any" formControlName="quantiteCommandee" />
+            <app-erreur-champ [controle]="form.controls.quantiteCommandee" />
+          </div>
+          <div class="champ">
+            <label for="ql">Quantité livrée (reçue)</label>
+            <input id="ql" type="number" min="0" step="any" formControlName="quantiteLivree" />
+          </div>
+          <div class="champ">
+            <label for="pu">Prix unitaire (FCFA) *</label>
+            <input id="pu" type="number" min="0" formControlName="prixUnitaire" />
+            <label class="case petit"><input type="checkbox" formControlName="majPrixCatalogue" /> Mettre à jour le prix du catalogue</label>
+          </div>
+          <div class="champ">
+            <label for="four">Fournisseur</label>
+            <input id="four" type="text" formControlName="fournisseur" />
+          </div>
+          <div class="champ">
+            <label for="mode">Mode de paiement</label>
+            <select id="mode" formControlName="modePaiement">
+              <option value="">—</option>
+              @for (m of parametres.modesPaiement(); track m) { <option [value]="m">{{ m }}</option> }
+            </select>
+          </div>
+          <div class="champ">
+            <label for="paye">Montant payé (FCFA)</label>
+            <input id="paye" type="number" min="0" formControlName="montantPaye" />
+          </div>
+          <div class="champ">
+            <label for="ref">N° de facture ou de reçu</label>
+            <input id="ref" type="text" formControlName="reference" />
+          </div>
+          <div class="champ large">
+            <label for="com">Commentaire</label>
+            <input id="com" type="text" formControlName="commentaire" />
+          </div>
+          <div class="apercu-calcul">Montant total : <strong>{{ apercu().montant | fcfa }}</strong> · Solde dû : <strong>{{ apercu().solde | fcfa }}</strong></div>
+          <div class="formulaire-actions">
+            <button type="button" class="btn" (click)="annuler()">Annuler</button>
+            <button type="submit" class="btn btn-primaire">Enregistrer</button>
+          </div>
+        </div>
+      </form>
+    }
+
+    <section class="carte">
+      <div class="filtres">
+        <input type="search" placeholder="Matériau, fournisseur ou référence…" [value]="recherche()" (input)="recherche.set(valeur($event))" aria-label="Rechercher" />
+      </div>
+      <div class="table-conteneur">
+        <table class="tableau">
+          <thead>
+            <tr><th>Date</th><th>Matériau</th><th class="num">Commandé</th><th class="num">Livré</th><th class="num">P.U.</th><th class="num">Montant</th>
+              <th class="num">Payé</th><th class="num">Solde dû</th><th>Fournisseur</th><th>Paiement</th><th>Réf.</th><th>Livraison</th><th></th></tr>
+          </thead>
+          <tbody>
+            @for (x of achats(); track x.achat.id) {
+              <tr>
+                <td class="nowrap">{{ x.achat.date | dateFr }}</td>
+                <td><span class="gras">{{ x.nom }}</span><div class="petit muted">{{ phases.nom(x.achat.phaseId) }}</div></td>
+                <td class="num">{{ x.achat.quantiteCommandee | nombre }} {{ x.unite }}</td>
+                <td class="num">{{ x.achat.quantiteLivree | nombre }}</td>
+                <td class="num">{{ x.achat.prixUnitaire | fcfa }}</td>
+                <td class="num gras">{{ x.montant | fcfa }}</td>
+                <td class="num">{{ x.achat.montantPaye | fcfa }}</td>
+                <td class="num" [class.positif]="x.solde > 0">{{ x.solde | fcfa }}</td>
+                <td>{{ x.achat.fournisseur || '—' }}</td>
+                <td>{{ x.achat.modePaiement || '—' }}</td>
+                <td>{{ x.achat.reference || '—' }}</td>
+                <td><span class="badge" [class.vert]="x.livraison === 'livre'" [class.orange]="x.livraison === 'partiel' || x.livraison === 'commande'"
+                          [class.rouge]="x.livraison === 'excedent'">{{ livraisons[x.livraison] }}</span></td>
+                <td class="actions-ligne">
+                  @if (x.livraison === 'commande' || x.livraison === 'partiel') {
+                    <button type="button" class="btn-lien" (click)="toutLivre(x.achat)">Tout reçu</button>
+                  }
+                  <button type="button" class="btn-lien" (click)="ouvrirModification(x.achat)">Modifier</button>
+                  <button type="button" class="btn-lien danger" (click)="supprimer(x.achat, x.nom)">Supprimer</button>
+                </td>
+              </tr>
+            } @empty {
+              <tr><td colspan="13" class="vide">Aucun achat enregistré.</td></tr>
+            }
+          </tbody>
+          <tfoot>
+            <tr><td colspan="5">Total</td><td class="num">{{ totaux().montant | fcfa }}</td><td class="num">{{ totaux().paye | fcfa }}</td><td class="num">{{ totaux().solde | fcfa }}</td><td colspan="5"></td></tr>
+          </tfoot>
+        </table>
+      </div>
+    </section>
+  }
+
+  @if (onglet() === 'sorties') {
+    @if (formulaireSortieVisible()) {
+      <form class="carte mb" [formGroup]="formSortie" (ngSubmit)="enregistrerSortie()">
+        <div class="carte-titre"><h2>Sortie de stock (consommation sur le chantier)</h2></div>
+        <div class="formulaire">
+          <div class="champ"><label for="sdate">Date *</label><input id="sdate" type="date" formControlName="date" /></div>
+          <div class="champ">
+            <label for="smat">Matériau *</label>
+            <select id="smat" formControlName="materiauId">
+              <option value="">— Choisir —</option>
+              @for (m of materiaux.materiaux(); track m.id) { <option [value]="m.id">{{ m.nom }} ({{ m.unite }})</option> }
+            </select>
+            @if (formSortie.controls.materiauId.value) { <span class="aide">Disponible : {{ disponibleSortie() | nombre }}</span> }
+          </div>
+          <div class="champ">
+            <label for="sphase">Phase</label>
+            <select id="sphase" formControlName="phaseId">
+              <option value="">Non affecté</option>
+              @for (p of phases.phases(); track p.id) { <option [value]="p.id">{{ p.ordre }}. {{ p.nom }}</option> }
+            </select>
+          </div>
+          <div class="champ">
+            <label for="sqte">Quantité consommée *</label>
+            <input id="sqte" type="number" min="0" step="any" formControlName="quantite" />
+            <app-erreur-champ [controle]="formSortie.controls.quantite" />
+          </div>
+          <div class="champ large"><label for="scom">Commentaire</label><input id="scom" type="text" formControlName="commentaire" /></div>
+          <div class="formulaire-actions">
+            <button type="button" class="btn" (click)="formulaireSortieVisible.set(false)">Annuler</button>
+            <button type="submit" class="btn btn-primaire">Enregistrer</button>
+          </div>
+        </div>
+      </form>
+    }
+    <section class="carte">
+      <div class="table-conteneur">
+        <table class="tableau">
+          <thead><tr><th>Date</th><th>Matériau</th><th class="num">Quantité</th><th>Phase</th><th>Commentaire</th><th></th></tr></thead>
+          <tbody>
+            @for (s of sorties(); track s.c.id) {
+              <tr>
+                <td>{{ s.c.date | dateFr }}</td><td class="gras">{{ s.nom }}</td><td class="num">{{ s.c.quantite | nombre }} {{ s.unite }}</td>
+                <td class="petit">{{ phases.nom(s.c.phaseId) }}</td><td class="petit">{{ s.c.commentaire }}</td>
+                <td class="actions-ligne">
+                  <button type="button" class="btn-lien" (click)="ouvrirSortie(s.c)">Modifier</button>
+                  <button type="button" class="btn-lien danger" (click)="supprimerSortie(s.c, s.nom)">Supprimer</button>
+                </td>
+              </tr>
+            } @empty {
+              <tr><td colspan="6" class="vide">Aucune sortie de stock enregistrée.</td></tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </section>
+  }
+
+  @if (onglet() === 'stocks') {
+    <section class="carte">
+      <div class="filtres">
+        <label class="case"><input type="checkbox" [checked]="alertesSeules()" (change)="alertesSeules.set(!alertesSeules())" /> Afficher uniquement les alertes et livraisons en attente</label>
+      </div>
+      <div class="table-conteneur">
+        <table class="tableau">
+          <thead>
+            <tr><th>Matériau</th><th>Unité</th><th class="num">Prévu</th><th class="num">Commandé</th><th class="num">Reçu</th>
+              <th class="num">Consommé</th><th class="num">Disponible</th><th class="num">En attente</th><th class="num">Reste à commander</th><th>État</th></tr>
+          </thead>
+          <tbody>
+            @for (s of stocks(); track s.materiau.id) {
+              <tr>
+                <td class="gras">{{ s.materiau.nom }}</td><td>{{ s.materiau.unite }}</td>
+                <td class="num">{{ s.prevu | nombre }}</td><td class="num">{{ s.commande | nombre }}</td><td class="num">{{ s.recu | nombre }}</td>
+                <td class="num">{{ s.consomme | nombre }}</td><td class="num gras">{{ s.disponible | nombre }}</td>
+                <td class="num">{{ s.enAttenteLivraison | nombre }}</td><td class="num">{{ s.resteACommander | nombre }}</td>
+                <td>
+                  @if (s.negatif) { <span class="badge rouge">Stock négatif</span> }
+                  @else if (s.faible) { <span class="badge orange">Stock faible (seuil {{ s.materiau.seuilAlerte | nombre }})</span> }
+                  @else if (s.recu > 0) { <span class="badge vert">OK</span> }
+                  @else { <span class="muted petit">—</span> }
+                </td>
+              </tr>
+            } @empty {
+              <tr><td colspan="10" class="vide">Aucun matériau à afficher.</td></tr>
+            }
+          </tbody>
+        </table>
+      </div>
+      <p class="petit muted mt">Commandé = achats passés · Reçu = quantités livrées · Consommé = sorties de stock · Disponible = reçu − consommé.
+        Le seuil d'alerte se règle dans la fiche de chaque matériau.</p>
+    </section>
+  }
+</div>

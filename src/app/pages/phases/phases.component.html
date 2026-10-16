@@ -1,0 +1,133 @@
+<div class="page">
+  <div class="page-entete">
+    <div>
+      <h1>Phases de construction</h1>
+      <p>Budget, dates, statut et avancement de chaque phase. Le budget d'une phase est calculé à partir des matériaux,
+        équipements, main-d'œuvre, transports et frais qui lui sont affectés.</p>
+    </div>
+    <div class="actions">
+      <button type="button" class="btn btn-primaire" (click)="ouvrirAjout()">Ajouter une phase</button>
+    </div>
+  </div>
+
+  <div class="grille grille-3 mb">
+    @for (t of parTranche(); track t.tranche) {
+      <button type="button" class="carte tranche" [class.active]="filtreTranche() === '' + t.tranche"
+              (click)="filtreTranche.set(filtreTranche() === '' + t.tranche ? '' : '' + t.tranche)">
+        <span class="badge bleu">Tranche {{ t.tranche }}</span>
+        <strong>{{ t.libelle.split('— ')[1] }}</strong>
+        <span class="petit muted">{{ t.terminees }}/{{ t.nombre }} phases terminées</span>
+        <span class="petit">Budget {{ t.reference | fcfa }} · payé {{ t.paye | fcfa }}</span>
+      </button>
+    }
+  </div>
+
+  @if (formulaireVisible()) {
+    <form class="carte mb" [formGroup]="form" (ngSubmit)="ajouter()">
+      <div class="carte-titre"><h2>Nouvelle phase</h2></div>
+      <div class="formulaire">
+        <div class="champ">
+          <label for="nom">Nom de la phase *</label>
+          <input id="nom" type="text" formControlName="nom" />
+          <app-erreur-champ [controle]="form.controls.nom" />
+        </div>
+        <div class="champ">
+          <label for="niveau">Niveau concerné *</label>
+          <input id="niveau" type="text" formControlName="niveau" placeholder="RDC, R+1, Tout le bâtiment…" />
+          <app-erreur-champ [controle]="form.controls.niveau" />
+        </div>
+        <div class="champ">
+          <label for="tranche">Tranche *</label>
+          <select id="tranche" formControlName="tranche">
+            @for (t of listeTranches; track t) { <option [ngValue]="t">{{ tranches[t] }}</option> }
+          </select>
+        </div>
+        <div class="formulaire-actions">
+          <button type="button" class="btn" (click)="formulaireVisible.set(false)">Annuler</button>
+          <button type="submit" class="btn btn-primaire">Enregistrer</button>
+        </div>
+      </div>
+    </form>
+  }
+
+  @if (nonAffecte().estimatif > 0) {
+    <p class="petit muted">
+      Éléments non encore répartis par phase : <strong>{{ nonAffecte().estimatif | fcfa }}</strong>
+      (estimation initiale des matériaux et enveloppes de main-d'œuvre). Répartissez-les depuis
+      <a routerLink="/materiaux">Matériaux</a> et <a routerLink="/main-oeuvre">Main-d'œuvre</a>.
+    </p>
+  }
+
+  <section class="carte">
+    <div class="filtres">
+      <input type="search" placeholder="Rechercher une phase…" [value]="recherche()" (input)="recherche.set(valeur($event))" aria-label="Rechercher" />
+      <select (change)="filtreTranche.set(valeur($event))" aria-label="Filtrer par tranche">
+        <option value="" [selected]="filtreTranche() === ''">Toutes les tranches</option>
+        @for (t of listeTranches; track t) { <option [value]="'' + t" [selected]="filtreTranche() === '' + t">Tranche {{ t }}</option> }
+      </select>
+      <select (change)="filtreStatut.set(valeur($event))" aria-label="Filtrer par statut">
+        <option value="">Tous les statuts</option>
+        @for (s of listeStatuts; track s[0]) { <option [value]="s[0]">{{ s[1] }}</option> }
+      </select>
+      <span class="muted petit">{{ lignes().length }} phase(s)</span>
+    </div>
+
+    <div class="table-conteneur">
+      <table class="tableau">
+        <thead>
+          <tr>
+            <th>N°</th><th>Phase</th><th>Niveau</th><th>Dates prévues</th><th>Statut</th><th>Avancement</th>
+            <th class="num">Estimatif</th><th class="num">Validé</th><th class="num">Payé</th><th class="num">Écart</th><th>Finançable</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (p of lignes(); track p.phase.id) {
+            <tr>
+              <td>{{ p.phase.ordre }}</td>
+              <td class="col-nom">
+                <a [routerLink]="['/phases', p.phase.id]" class="gras">{{ p.phase.nom }}</a>
+                <div class="petit muted">Tranche {{ p.phase.tranche }}</div>
+              </td>
+              <td>{{ p.phase.niveau }}</td>
+              <td class="nowrap petit">{{ p.phase.dateDebut | dateFr }} → {{ p.phase.dateFin | dateFr }}</td>
+              <td>
+                <select class="saisie-inline" style="width: 120px"
+                        (change)="changerStatut(p.phase.id, valeur($event))" [attr.aria-label]="'Statut de ' + p.phase.nom">
+                  @for (s of listeStatuts; track s[0]) { <option [value]="s[0]" [selected]="s[0] === p.phase.statut">{{ s[1] }}</option> }
+                </select>
+              </td>
+              <td><app-progression [valeur]="p.phase.avancement" /></td>
+              <td class="num">{{ p.estimatif | fcfa }}</td>
+              <td class="num">
+                @if (p.valide !== null) { {{ p.valide | fcfa }} } @else { <span class="muted">—</span> }
+              </td>
+              <td class="num">{{ p.paye | fcfa }}</td>
+              <td class="num" [class.positif]="p.ecart > 0 && p.paye > 0" [class.negatif]="p.economie > 0">
+                {{ p.paye > 0 || p.phase.statut === 'termine' ? (p.ecart | fcfa) : '—' }}
+              </td>
+              <td class="petit nowrap">
+                @if (p.phase.statut === 'termine') { <span class="badge vert">Terminée</span> }
+                @else if (p.financable) { {{ p.financable | mois }} }
+                @else if (p.financable === null) { <span class="badge orange">Au-delà</span> }
+                @else { <span class="muted">Budget à définir</span> }
+              </td>
+            </tr>
+          } @empty {
+            <tr><td colspan="11" class="vide">Aucune phase ne correspond aux filtres.</td></tr>
+          }
+        </tbody>
+        <tfoot>
+          <tr>
+            <td colspan="6">Total des phases affichées</td>
+            <td class="num">{{ totaux().estimatif | fcfa }}</td>
+            <td class="num">{{ totaux().reference | fcfa }}</td>
+            <td class="num">{{ totaux().paye | fcfa }}</td>
+            <td colspan="2"></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+    <p class="petit muted mt">La colonne « Validé » du pied de tableau indique le budget de référence (validé s'il existe, estimatif sinon).
+      L'écart (payé − budget) n'est affiché que lorsque des paiements existent.</p>
+  </section>
+</div>

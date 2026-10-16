@@ -1,0 +1,237 @@
+<div class="page">
+  <div class="page-entete">
+    <div>
+      <h1>Dépenses</h1>
+      <p>Registre des dépenses, transports et frais annexes. Écart budgétaire = Dépenses réelles − Budget prévisionnel
+        (positif = dépassement, négatif = économie).</p>
+    </div>
+    <div class="actions">
+      <button type="button" class="btn" (click)="exporterCsv()">Exporter (CSV)</button>
+      <button type="button" class="btn btn-primaire" (click)="onglet.set('registre'); ouvrirAjout()">Ajouter une dépense</button>
+    </div>
+  </div>
+
+  <app-bandeau niveau="info">
+    Une <strong>commande</strong>, une <strong>facture</strong> et un <strong>paiement</strong> sont distincts : l'étape indique où en est
+    la dépense, et seul le « montant payé » compte comme dépense réelle. Les achats de matériaux, la main-d'œuvre et les équipements
+    se saisissent dans leurs modules et apparaissent dans la vue consolidée (aucune double saisie).
+  </app-bandeau>
+  @for (a of alertes(); track $index) {
+    <app-bandeau [niveau]="a.niveau">{{ a.message }}</app-bandeau>
+  }
+
+  <div class="onglets" role="tablist">
+    <button type="button" role="tab" [class.actif]="onglet() === 'registre'" (click)="onglet.set('registre')">Registre des dépenses</button>
+    <button type="button" role="tab" [class.actif]="onglet() === 'frais'" (click)="onglet.set('frais')">Transport et frais annexes</button>
+    <button type="button" role="tab" [class.actif]="onglet() === 'consolide'" (click)="onglet.set('consolide')">Tous les paiements</button>
+  </div>
+
+  @if (formulaireVisible()) {
+    <form class="carte mb" [formGroup]="form" (ngSubmit)="enregistrer()">
+      <div class="carte-titre"><h2>{{ editionId() ? 'Modifier la dépense' : 'Nouvelle dépense' }}</h2></div>
+      <div class="formulaire">
+        <div class="champ"><label for="date">Date *</label><input id="date" type="date" formControlName="date" /></div>
+        <div class="champ">
+          <label for="cat">Catégorie *</label>
+          <select id="cat" formControlName="categorie">
+            @for (c of listeCategories; track c[0]) { <option [value]="c[0]">{{ c[1] }}</option> }
+          </select>
+        </div>
+        <div class="champ">
+          <label for="phase">Phase *</label>
+          <select id="phase" formControlName="phaseId">
+            <option value="">— Choisir une phase —</option>
+            @for (p of phases.phases(); track p.id) { <option [value]="p.id">{{ p.ordre }}. {{ p.nom }}</option> }
+          </select>
+          <app-erreur-champ [controle]="form.controls.phaseId" />
+        </div>
+        <div class="champ large">
+          <label for="desc">Description *</label>
+          <input id="desc" type="text" formControlName="description" />
+          <app-erreur-champ [controle]="form.controls.description" />
+        </div>
+        <div class="champ"><label for="prevu">Montant prévu (FCFA) *</label><input id="prevu" type="number" min="0" formControlName="montantPrevu" /></div>
+        <div class="champ">
+          <label for="etape">Étape *</label>
+          <select id="etape" formControlName="etape">
+            @for (e of listeEtapes; track e[0]) { <option [value]="e[0]">{{ e[1] }}</option> }
+          </select>
+        </div>
+        <div class="champ"><label for="paye">Montant réellement payé (FCFA)</label><input id="paye" type="number" min="0" formControlName="montantPaye" /></div>
+        <div class="champ">
+          <label for="moyen">Moyen de paiement</label>
+          <select id="moyen" formControlName="moyenPaiement">
+            <option value="">—</option>
+            @for (m of parametres.modesPaiement(); track m) { <option [value]="m">{{ m }}</option> }
+          </select>
+        </div>
+        <div class="champ"><label for="benef">Bénéficiaire</label><input id="benef" type="text" formControlName="beneficiaire" /></div>
+        <div class="champ"><label for="ref">Référence du justificatif</label><input id="ref" type="text" formControlName="reference" placeholder="N° facture, reçu…" /></div>
+        <div class="champ large"><label for="com">Commentaire</label><input id="com" type="text" formControlName="commentaire" /></div>
+        <div class="apercu-calcul">Écart budgétaire : <strong [class.positif]="apercuEcart() > 0" [class.negatif]="apercuEcart() < 0">{{ apercuEcart() | fcfa }}</strong></div>
+        <div class="formulaire-actions">
+          <button type="button" class="btn" (click)="annuler()">Annuler</button>
+          <button type="submit" class="btn btn-primaire">Enregistrer</button>
+        </div>
+      </div>
+    </form>
+  }
+
+  @if (onglet() === 'registre') {
+    <div class="grille grille-stats mb">
+      <app-carte-stat libelle="Total prévu" [valeur]="fcfa(totauxRegistre().prevu)" />
+      <app-carte-stat libelle="Total engagé" [valeur]="fcfa(totauxRegistre().engage)" ton="gris" detail="Commandé ou facturé" />
+      <app-carte-stat libelle="Total payé" [valeur]="fcfa(totauxRegistre().paye)" ton="orange" />
+      <app-carte-stat libelle="Écart budgétaire" [valeur]="fcfa(totauxRegistre().ecart)" [ton]="totauxRegistre().ecart > 0 ? 'rouge' : 'vert'" />
+    </div>
+    <section class="carte">
+      <div class="filtres">
+        <input type="search" placeholder="Description, bénéficiaire, justificatif…" [value]="recherche()" (input)="recherche.set(valeur($event))" aria-label="Rechercher" />
+        <select (change)="filtreCategorie.set(valeur($event))" aria-label="Filtrer par catégorie">
+          <option value="">Toutes les catégories</option>
+          @for (c of listeCategories; track c[0]) { <option [value]="c[0]">{{ c[1] }}</option> }
+        </select>
+        <select (change)="filtrePhase.set(valeur($event))" aria-label="Filtrer par phase">
+          <option value="">Toutes les phases</option>
+          @for (p of phases.phases(); track p.id) { <option [value]="p.id">{{ p.ordre }}. {{ p.nom }}</option> }
+        </select>
+      </div>
+      <div class="table-conteneur">
+        <table class="tableau">
+          <thead>
+            <tr><th>Date</th><th>Catégorie</th><th>Description</th><th>Phase</th><th class="num">Prévu</th><th class="num">Payé</th>
+              <th class="num">Écart</th><th>Étape</th><th>Paiement</th><th>Bénéficiaire</th><th>Justificatif</th><th></th></tr>
+          </thead>
+          <tbody>
+            @for (x of registre(); track x.depense.id) {
+              <tr>
+                <td class="nowrap">{{ x.depense.date | dateFr }}</td>
+                <td class="petit">{{ categories[x.depense.categorie] }}</td>
+                <td><span class="gras">{{ x.depense.description }}</span>
+                  @if (x.depense.commentaire) { <div class="petit muted">{{ x.depense.commentaire }}</div> }</td>
+                <td class="petit">{{ phases.nom(x.depense.phaseId) }}</td>
+                <td class="num">{{ x.depense.montantPrevu | fcfa }}</td>
+                <td class="num gras">{{ x.depense.montantPaye | fcfa }}</td>
+                <td class="num" [class.positif]="x.ecart > 0" [class.negatif]="x.ecart < 0 && x.depense.montantPaye > 0">{{ x.ecart | fcfa }}</td>
+                <td><span class="badge bleu">{{ etapes[x.depense.etape] }}</span></td>
+                <td><span class="badge" [class.vert]="x.paiement === 'paye'" [class.orange]="x.paiement === 'partiel'" [class.rouge]="x.paiement === 'depasse'">{{ paiements[x.paiement] }}</span></td>
+                <td>{{ x.depense.beneficiaire || '—' }}</td>
+                <td>{{ x.depense.reference || '—' }}</td>
+                <td class="actions-ligne">
+                  <button type="button" class="btn-lien" (click)="ouvrirModification(x.depense)">Modifier</button>
+                  <button type="button" class="btn-lien danger" (click)="supprimer(x.depense)">Supprimer</button>
+                </td>
+              </tr>
+            } @empty {
+              <tr><td colspan="12" class="vide">Aucune dépense enregistrée.</td></tr>
+            }
+          </tbody>
+          <tfoot>
+            <tr><td colspan="4">Total</td><td class="num">{{ totauxRegistre().prevu | fcfa }}</td><td class="num">{{ totauxRegistre().paye | fcfa }}</td>
+              <td class="num">{{ totauxRegistre().ecart | fcfa }}</td><td colspan="5"></td></tr>
+          </tfoot>
+        </table>
+      </div>
+    </section>
+
+    <div class="grille grille-2 section">
+      <section class="carte">
+        <h2>Dépassements de budget</h2>
+        @for (x of depassements(); track x.depense.id) {
+          <div class="ligne-liee"><span>{{ x.depense.description }} <small class="muted">{{ phases.nom(x.depense.phaseId) }}</small></span>
+            <span class="num positif">+{{ x.ecart | fcfa }}</span></div>
+        } @empty { <p class="muted petit">Aucun dépassement.</p> }
+      </section>
+      <section class="carte">
+        <h2>Économies réalisées</h2>
+        @for (x of economies(); track x.depense.id) {
+          <div class="ligne-liee"><span>{{ x.depense.description }} <small class="muted">{{ phases.nom(x.depense.phaseId) }}</small></span>
+            <span class="num negatif">{{ x.ecart | fcfa }}</span></div>
+        } @empty { <p class="muted petit">Aucune économie constatée (une économie est comptée lorsque la dépense est facturée et payée sous le prévu).</p> }
+      </section>
+    </div>
+  }
+
+  @if (onglet() === 'frais') {
+    <div class="grille grille-2 mb">
+      <section class="carte">
+        <h2>Réserve pour imprévus</h2>
+        <p class="petit muted">Pourcentage appliqué au budget de base, affiché séparément. Les dépenses de catégorie « Imprévus » la consomment.</p>
+        <div class="champ" style="max-width: 200px">
+          <label for="pct">Pourcentage de réserve (%)</label>
+          <input id="pct" type="number" min="0" max="50" step="0.5" [value]="projet.projet().pourcentageReserve" (change)="modifierReserve($event)" />
+        </div>
+        <dl class="lignes-def mt">
+          <dt>Budget de base (hors réserve)</dt><dd>{{ s().baseReference | fcfa }}</dd>
+          <dt>Réserve pour imprévus ({{ s().pourcentageReserve }} %)</dt><dd>{{ s().reserveReference | fcfa }}</dd>
+          <dt>Imprévus déjà payés</dt><dd>{{ s().paye.imprevus | fcfa }}</dd>
+          <dt class="total">Réserve restante</dt><dd class="total" [class.positif]="s().reserveRestante < 0">{{ s().reserveRestante | fcfa }}</dd>
+        </dl>
+      </section>
+      <section class="carte">
+        <h2>Ajouter rapidement</h2>
+        <p class="petit muted">Choisissez un type de frais : le formulaire s'ouvre pré-rempli. Chaque dépense doit être affectée à une phase.</p>
+        <div class="puces">
+          @for (m of modeles; track m.libelle) {
+            <button type="button" class="btn btn-sm" (click)="ouvrirAjout(m)">+ {{ m.libelle }}</button>
+          }
+        </div>
+      </section>
+    </div>
+    <section class="carte">
+      <h2>Récapitulatif par catégorie</h2>
+      <div class="table-conteneur">
+        <table class="tableau">
+          <thead><tr><th>Catégorie</th><th class="num">Prévu</th><th class="num">Payé</th><th class="num">Écart</th></tr></thead>
+          <tbody>
+            @for (c of service.recapParCategorie(); track c.categorie) {
+              <tr><td>{{ categories[c.categorie] }}</td><td class="num">{{ c.prevu | fcfa }}</td><td class="num">{{ c.paye | fcfa }}</td>
+                <td class="num" [class.positif]="c.ecart > 0">{{ c.ecart | fcfa }}</td></tr>
+            } @empty {
+              <tr><td colspan="4" class="vide">Aucun frais enregistré. Utilisez les boutons ci-dessus.</td></tr>
+            }
+          </tbody>
+          <tfoot><tr><td>Total</td><td class="num">{{ service.totaux().prevu | fcfa }}</td><td class="num">{{ service.totaux().paye | fcfa }}</td><td class="num">{{ service.totaux().ecart | fcfa }}</td></tr></tfoot>
+        </table>
+      </div>
+      <p class="petit muted mt">Le détail de chaque dépense se trouve dans l'onglet « Registre des dépenses ».</p>
+    </section>
+  }
+
+  @if (onglet() === 'consolide') {
+    <section class="carte">
+      <div class="filtres">
+        <select (change)="filtreSource.set(valeur($event))" aria-label="Filtrer par source">
+          <option value="">Toutes les sources</option>
+          <option value="achat">Achats de matériaux</option>
+          <option value="main_oeuvre">Main-d'œuvre</option>
+          <option value="equipement">Équipements</option>
+          <option value="depense">Dépenses et frais</option>
+        </select>
+        <select (change)="filtrePhase.set(valeur($event))" aria-label="Filtrer par phase">
+          <option value="">Toutes les phases</option>
+          @for (p of phases.phases(); track p.id) { <option [value]="p.id">{{ p.ordre }}. {{ p.nom }}</option> }
+        </select>
+      </div>
+      <div class="table-conteneur">
+        <table class="tableau">
+          <thead><tr><th>Date</th><th>Source</th><th>Libellé</th><th>Phase</th><th class="num">Engagé</th><th class="num">Payé</th><th>Bénéficiaire</th></tr></thead>
+          <tbody>
+            @for (m of mouvements(); track m.source + m.id) {
+              <tr>
+                <td class="nowrap">{{ m.date | dateFr }}</td><td><span class="badge">{{ sources[m.source] }}</span></td>
+                <td>{{ m.libelle }}</td><td class="petit">{{ phases.nom(m.phaseId) }}</td>
+                <td class="num">{{ m.engage | fcfa }}</td><td class="num gras">{{ m.paye | fcfa }}</td><td>{{ m.beneficiaire || '—' }}</td>
+              </tr>
+            } @empty {
+              <tr><td colspan="7" class="vide">Aucun engagement ni paiement enregistré.</td></tr>
+            }
+          </tbody>
+          <tfoot><tr><td colspan="4">Total</td><td class="num">{{ totauxMouvements().engage | fcfa }}</td><td class="num">{{ totauxMouvements().paye | fcfa }}</td><td></td></tr></tfoot>
+        </table>
+      </div>
+      <p class="petit muted mt">Pour modifier une ligne, allez dans le module d'origine :
+        <a routerLink="/achats-stocks">Achats</a>, <a routerLink="/main-oeuvre">Main-d'œuvre</a>, <a routerLink="/equipements">Équipements</a> ou le registre ci-dessus.</p>
+    </section>
+  }
+</div>

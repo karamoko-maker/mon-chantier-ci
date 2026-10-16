@@ -1,0 +1,14 @@
+.rapport h2 { margin-top: 1.4rem; padding-bottom: 0.3rem; border-bottom: 2px solid var(--bleu-100); font-size: 1.02rem; }
+.entete-rapport { border-bottom: 3px solid var(--bleu-800); padding-bottom: 0.6rem; margin-bottom: 0.8rem; }
+.entete-rapport h1 { margin: 0; }
+.mention {
+  background: var(--orange-fond); color: #7a4304; border: 1px solid #f3d29c; border-radius: 6px;
+  padding: 0.5rem 0.8rem; font-weight: 700; text-align: center; margin-bottom: 0.5rem;
+}
+.deux-colonnes { grid-template-columns: max-content 1fr; }
+.deux-colonnes dd { text-align: left; font-weight: 500; }
+.recap { max-width: 560px; }
+@media print {
+  .rapport h2 { break-after: avoid; }
+  .mention { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
